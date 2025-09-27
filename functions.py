@@ -193,51 +193,6 @@ def extend_box_downwards(box_xyxy,
     return (float(left), float(top), float(right), float(bottom)), actual_upper_ratio
 
 
-def detect_crown_with_retry(img,
-                            face_box_xyxy,
-                            img_w,
-                            img_h,
-                            retry_expand_ratio: float = 0.15,
-                            border_tol_px: int = 2):
-    """Detect the hair crown (top of head) with a single retry using an expanded ROI.
-
-    Args:
-        img: full image array.
-        face_box_xyxy: tuple (x1, y1, x2, y2) describing the face box.
-        img_w, img_h: image dimensions.
-        retry_expand_ratio: extra fraction of face height to add upwards when retrying.
-        border_tol_px: tolerance to consider the detection too close to the face box top.
-
-    Returns:
-        (y_crown_abs, debug_dict)
-    """
-    y_crown, debug = top_of_hair_y_debug(img, face_box_xyxy, img_w, img_h)
-
-    need_retry = False
-    if y_crown is None:
-        need_retry = True
-    else:
-        face_top = face_box_xyxy[1]
-        if y_crown >= face_top - border_tol_px:
-            need_retry = True
-
-    if not need_retry or retry_expand_ratio <= 0:
-        return y_crown, debug
-
-    x1, y1, x2, y2 = face_box_xyxy
-    face_height = max(1.0, y2 - y1)
-    extra = int(round(retry_expand_ratio * face_height))
-    if extra <= 0:
-        return y_crown, debug
-
-    expanded_y1 = max(0, int(round(y1 - extra)))
-    expanded_box = (x1, expanded_y1, x2, y2)
-
-    y_crown_retry, debug_retry = top_of_hair_y_debug(img, expanded_box, img_w, img_h)
-    if y_crown_retry is not None:
-        return y_crown_retry, debug_retry
-
-    return y_crown, debug
 def adjust_box_to_ratio(x1, y1, x2, y2, img_w, img_h,
                         target_w_over_h=7/9, strategy="auto"):
     """
