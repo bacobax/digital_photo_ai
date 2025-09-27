@@ -38,6 +38,12 @@ class FacePipelineItem:
     debug: Dict[str, np.ndarray] = field(default_factory=dict)
     top_margin_ratio_achieved: Optional[float] = None
     upper_ratio_achieved: Optional[float] = None
+    pre_scale_crop: Optional[np.ndarray] = None
+    stage5_final_crop: Optional[np.ndarray] = None
+    crown_to_chin_mm: Optional[float] = None
+    hair_to_chin_mm: Optional[float] = None
+    forehead_to_chin_mm: Optional[float] = None
+    px_per_mm: Optional[float] = None
 
 
 @dataclass
@@ -76,8 +82,7 @@ class FaceFramingPipeline:
         self._extend_bottom_margin()
         self._crop_and_map()
         self._scale_crops_with_constraints()
-        if self.save_debug:
-            self._save_debug_outputs()
+        self._balance_lighting()
         return self.items
 
     # Stage 1 -----------------------------------------------------------------
@@ -90,29 +95,41 @@ class FaceFramingPipeline:
             else np.empty((0, 4))
         )
 
-        for (x1, y1, x2, y2) in boxes_xyxy:
-            ax1, ay1, ax2, ay2 = adjust_box_to_ratio(
-                x1,
-                y1,
-                x2,
-                y2,
-                img_w=self.img.shape[1],
-                img_h=self.img.shape[0],
-                target_w_over_h=self.params.target_w_over_h,
-                strategy="auto",
-            )
-            item = FacePipelineItem(
-                original_box=(ax1, ay1, ax2, ay2),
-                top_margin_box=(ax1, ay1, ax2, ay2),
-                bottom_scaled_box=(ax1, ay1, ax2, ay2),
-                final_box=(ax1, ay1, ax2, ay2),
-                chin_y_abs=ay2,
-                top_face_y_abs=ay1,
-                original_bottom_y_abs=ay2,
-            )
-            self.items.append(item)
+        if boxes_xyxy.shape[0] == 0:
+            print("[Stage 1] No faces detected.")
+            return
 
-        print(f"[Stage 1] Found {len(self.items)} face candidate(s).")
+        x1, y1, x2, y2 = boxes_xyxy[0]
+        if boxes_xyxy.shape[0] > 1:
+            print(
+                f"[Stage 1] Multiple faces detected; selecting the first of {boxes_xyxy.shape[0]} candidates."
+            )
+
+        ax1, ay1, ax2, ay2 = adjust_box_to_ratio(
+            x1,
+            y1,
+            x2,
+            y2,
+            img_w=self.img.shape[1],
+            img_h=self.img.shape[0],
+            target_w_over_h=self.params.target_w_over_h,
+            strategy="auto",
+        )
+        item = FacePipelineItem(
+            original_box=(ax1, ay1, ax2, ay2),
+            top_margin_box=(ax1, ay1, ax2, ay2),
+            bottom_scaled_box=(ax1, ay1, ax2, ay2),
+            final_box=(ax1, ay1, ax2, ay2),
+            chin_y_abs=ay2,
+            top_face_y_abs=ay1,
+            original_bottom_y_abs=ay2,
+        )
+        self.items.append(item)
+
+        print("[Stage 1] Using 1 face candidate.")
+
+        if self.save_debug:
+            self._save_stage1_debug()
 
     # Stage 2 -----------------------------------------------------------------
     def _detect_hair_and_top_margin(self) -> None:
@@ -160,6 +177,9 @@ class FaceFramingPipeline:
             else:
                 print(f"  [Face {idx}] Top margin satisfied (achieved {achieved:.3f}).")
 
+        if self.save_debug:
+            self._save_stage2_debug()
+
     # Stage 3 -----------------------------------------------------------------
     def _extend_bottom_margin(self) -> None:
         print(
@@ -186,6 +206,9 @@ class FaceFramingPipeline:
                 )
             else:
                 print(f"  [Face {idx}] Bottom extension satisfied (achieved {achieved:.3f}).")
+
+        if self.save_debug:
+            self._save_stage3_debug()
 
     # Stage 4 -----------------------------------------------------------------
     def _crop_and_map(self) -> None:
@@ -239,7 +262,7 @@ class FaceFramingPipeline:
             "[Stage 5] Scaling crops to meet pixel/mm constraints and trimming padding."
         )
         if self.save_debug:
-            os.makedirs(os.path.join(self.logdir, "final_crops"), exist_ok=True)
+            os.makedirs(os.path.join(self.logdir, "stage5_prepared"), exist_ok=True)
 
         for idx, item in enumerate(self.items, start=1):
             crop = item.final_crop
@@ -396,6 +419,8 @@ class FaceFramingPipeline:
                     else:
                         trim_limited = True
 
+            item.pre_scale_crop = crop.copy()
+
             scale = max(
                 1.0,
                 self.params.min_height_px / max(1, crop_h),
@@ -405,12 +430,37 @@ class FaceFramingPipeline:
             scaled_h = max(1, int(round(crop_h * scale)))
             final_crop = cv2.resize(crop, (scaled_w, scaled_h), interpolation=cv2.INTER_CUBIC)
 
+            target_height_px = self.params.min_height_px
+            target_width_px = int(round(target_height_px * self.params.target_w_over_h))
+            if target_width_px < self.params.min_width_px:
+                target_width_px = self.params.min_width_px
+                target_height_px = int(round(target_width_px / self.params.target_w_over_h))
+
+            extra_scale_x = 1.0
+            extra_scale_y = 1.0
+            if (
+                final_crop.shape[0] != target_height_px
+                or final_crop.shape[1] != target_width_px
+            ):
+                extra_scale_x = target_width_px / max(1, final_crop.shape[1])
+                extra_scale_y = target_height_px / max(1, final_crop.shape[0])
+                final_crop = cv2.resize(
+                    final_crop,
+                    (target_width_px, target_height_px),
+                    interpolation=cv2.INTER_CUBIC,
+                )
+                scaled_w = target_width_px
+                scaled_h = target_height_px
+
+            total_scale_x = scale * extra_scale_x
+            total_scale_y = scale * extra_scale_y
+
             offsets = {
-                "chin": chin * scale if chin is not None else None,
-                "hair": hair * scale if hair is not None else None,
-                "forehead": forehead * scale if forehead is not None else None,
-                "crown": crown * scale if crown is not None else None,
-                "bottom": bottom * scale if bottom is not None else None,
+                "chin": chin * total_scale_y if chin is not None else None,
+                "hair": hair * total_scale_y if hair is not None else None,
+                "forehead": forehead * total_scale_y if forehead is not None else None,
+                "crown": crown * total_scale_y if crown is not None else None,
+                "bottom": bottom * total_scale_y if bottom is not None else None,
             }
 
             px_per_mm = scaled_h / self.params.target_height_mm
@@ -452,170 +502,363 @@ class FaceFramingPipeline:
             item.top_face_y_local = offsets["forehead"]
             item.crown_y_local = offsets["crown"]
             item.original_bottom_y_local = offsets["bottom"]
+            item.px_per_mm = px_per_mm
+            item.crown_to_chin_mm = crown_mm
+            item.hair_to_chin_mm = hair_mm
+            item.forehead_to_chin_mm = forehead_mm
+            item.stage5_final_crop = final_crop.copy()
 
-            if self.save_debug:
-                crops_dir = os.path.join(self.logdir, "final_crops")
-                raw_path = os.path.join(crops_dir, f"face{idx:02d}_crop_original.jpg")
-                cv2.imwrite(raw_path, crop)
+        if self.save_debug:
+            self._save_stage5_debug()
 
-                crop_path = os.path.join(crops_dir, f"face{idx:02d}_crop.jpg")
-                cv2.imwrite(crop_path, final_crop)
+    # Stage 6 -----------------------------------------------------------------
+    def _balance_lighting(self) -> None:
+        print("[Stage 6] Harmonising facial lighting across partitions.")
+        for idx, item in enumerate(self.items, start=1):
+            crop = item.final_crop
+            if crop is None or crop.size == 0:
+                print(f"  [Face {idx}] No final crop available; skipping lighting balance.")
+                continue
 
-                annotated_crop = final_crop.copy()
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                font_scale = 0.5
-                label_thickness = 1
+            balanced_crop, stats, scale_map_vis = self._apply_partition_lighting_balance(crop)
+            item.final_crop = balanced_crop
+            if scale_map_vis is not None and self.save_debug:
+                self._save_stage6_lighting_debug(idx, scale_map_vis)
 
-                def annotate_line(name: str,
-                                  offset: Optional[float],
-                                  color: Tuple[int, int, int]) -> None:
-                    if offset is None:
-                        return
-                    y = int(np.clip(round(offset), 0, annotated_crop.shape[0] - 1))
-                    cv2.line(annotated_crop, (0, y), (annotated_crop.shape[1] - 1, y), color, 2)
-                    text_y = int(np.clip(y - 6, 12, annotated_crop.shape[0] - 6))
-                    cv2.putText(
-                        annotated_crop,
-                        name,
-                        (8, text_y + 1),
-                        font,
-                        font_scale,
-                        (0, 0, 0),
-                        thickness=label_thickness + 1,
-                        lineType=cv2.LINE_AA,
-                    )
-                    cv2.putText(
-                        annotated_crop,
-                        name,
-                        (8, text_y),
-                        font,
-                        font_scale,
-                        color,
-                        thickness=label_thickness,
-                        lineType=cv2.LINE_AA,
-                    )
-
-                line_specs = [
-                    ("Crown", item.crown_y_local, (255, 255, 0)),
-                    ("Hair Top", item.hair_top_y_local, (0, 0, 255)),
-                    ("Forehead", item.top_face_y_local, (0, 255, 255)),
-                    ("Chin", item.chin_y_local, (0, 165, 255)),
-                    ("Bottom", item.original_bottom_y_local, (255, 0, 255)),
-                ]
-
-                for name, offset, color in line_specs:
-                    annotate_line(name, offset, color)
-
-                distance_specs: List[Tuple[str, Optional[float], Tuple[int, int, int]]] = [
-                    ("Crown→Chin", crown_mm, (255, 255, 0)),
-                    ("Hair→Chin", hair_mm, (0, 0, 255)),
-                    ("Forehead→Chin", forehead_mm, (0, 255, 255)),
-                ]
-                legend_entries = [
-                    (label, value, color)
-                    for (label, value, color) in distance_specs
-                    if value is not None
-                ]
-                if legend_entries:
-                    max_text_width = 0
-                    for label, value, color in legend_entries:
-                        text = f"{label}: {value:.2f} mm"
-                        (text_w, _), _ = cv2.getTextSize(
-                            text,
-                            font,
-                            font_scale,
-                            label_thickness,
-                        )
-                        max_text_width = max(max_text_width, text_w)
-                    legend_x = max(8, annotated_crop.shape[1] - max_text_width - 12)
-                    for idx_entry, (label, value, color) in enumerate(legend_entries):
-                        text = f"{label}: {value:.2f} mm"
-                        text_y = 20 + idx_entry * 20
-                        cv2.putText(
-                            annotated_crop,
-                            text,
-                            (legend_x, text_y + 1),
-                            font,
-                            font_scale,
-                            (0, 0, 0),
-                            thickness=label_thickness + 1,
-                            lineType=cv2.LINE_AA,
-                        )
-                        cv2.putText(
-                            annotated_crop,
-                            text,
-                            (legend_x, text_y),
-                            font,
-                            font_scale,
-                            color,
-                            thickness=label_thickness,
-                            lineType=cv2.LINE_AA,
-                        )
-
-                annotated_path = os.path.join(crops_dir, f"face{idx:02d}_crop_guides.jpg")
-                cv2.imwrite(annotated_path, annotated_crop)
-
-                metrics = []
-                if crown_mm is not None:
-                    metrics.append(f"crown-chin {crown_mm:.2f} mm")
-                if hair_mm is not None:
-                    metrics.append(f"hair-chin {hair_mm:.2f} mm")
-                if forehead_mm is not None:
-                    metrics.append(f"forehead-chin {forehead_mm:.2f} mm")
-
-                abs_coords = []
-                if item.chin_y_abs is not None:
-                    abs_coords.append(f"chin y {item.chin_y_abs:.1f}")
-                if item.top_face_y_abs is not None:
-                    abs_coords.append(f"forehead y {item.top_face_y_abs:.1f}")
-                if item.hair_top_y_abs is not None:
-                    abs_coords.append(f"top hair y {item.hair_top_y_abs:.1f}")
-                if item.crown_y_abs is not None:
-                    abs_coords.append(f"crown y {item.crown_y_abs:.1f}")
-                if item.original_bottom_y_abs is not None:
-                    abs_coords.append(f"orig bottom y {item.original_bottom_y_abs:.1f}")
-
-                suffix = ""
-                details = metrics + abs_coords
-                if details:
-                    suffix = " | " + " | ".join(details)
-
+            if stats["needs_adjustment"]:
                 print(
-                    f"  [Face {idx}] Saved crop {scaled_w}x{scaled_h}px -> {crop_path}; "
-                    f"guides -> {annotated_path}{suffix}"
+                    f"  [Face {idx}] Lighting balanced (gain up to {stats['max_gain']:.2f}x," \
+                    f" partitions matched to brightest)."
                 )
             else:
-                summary = [f"size {final_crop.shape[1]}x{final_crop.shape[0]} px"]
-                if crown_mm is not None:
-                    summary.append(f"crown-chin {crown_mm:.2f} mm")
-                if hair_mm is not None:
-                    summary.append(f"hair-chin {hair_mm:.2f} mm")
-                if forehead_mm is not None:
-                    summary.append(f"forehead-chin {forehead_mm:.2f} mm")
-                print(f"  [Face {idx}] Final crop in memory ({' | '.join(summary)})")
+                print(f"  [Face {idx}] Lighting already uniform; no adjustment applied.")
 
-    # Debug saving ------------------------------------------------------------
-    def _save_debug_outputs(self) -> None:
-        detection_vis = self._create_detection_visual()
-        hair_vis = self._create_hair_visual()
-        final_vis = self._create_final_visual()
+            self._emit_final_outputs(idx, item)
 
-        detection_path = os.path.join(self.logdir, "faces_ratio_adjusted.jpg")
-        final_path = os.path.join(self.logdir, "faces_7x9_final_boxes.jpg")
-        top_margin_path = os.path.join(self.logdir, "faces_7x9_top_margin.jpg")
-        hair_dir = os.path.join(self.logdir, "hair_debug")
-        os.makedirs(hair_dir, exist_ok=True)
+    def _apply_partition_lighting_balance(
+        self, crop: np.ndarray
+    ) -> Tuple[np.ndarray, Dict[str, float], Optional[np.ndarray]]:
+        h, w = crop.shape[:2]
+        lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
+        L = lab[:, :, 0].astype(np.float32)
 
-        cv2.imwrite(detection_path, detection_vis)
-        cv2.imwrite(final_path, final_vis)
-        cv2.imwrite(top_margin_path, final_vis)
-        cv2.imwrite(os.path.join(hair_dir, "result_with_top_lines.jpg"), hair_vis)
+        mid_y = h // 2
+        mid_x = w // 2
 
-        self._save_hair_debug_steps(hair_dir)
+        masks = {
+            "up": np.zeros((h, w), dtype=bool),
+            "down": np.zeros((h, w), dtype=bool),
+            "left": np.zeros((h, w), dtype=bool),
+            "right": np.zeros((h, w), dtype=bool),
+        }
 
-        print(f"[Output] Ratio-adjusted detections -> {detection_path}")
-        print(f"[Output] Final boxes visualization -> {final_path}")
-        print(f"[Output] Hair-line diagnostics -> {os.path.join(hair_dir, 'result_with_top_lines.jpg')}")
+        masks["up"][:mid_y, :] = True
+        masks["down"][mid_y:, :] = True
+        masks["left"][:, :mid_x] = True
+        masks["right"][:, mid_x:] = True
+
+        means: Dict[str, float] = {}
+        for name, mask in masks.items():
+            if mask.any():
+                means[name] = float(L[mask].mean())
+            else:
+                means[name] = 0.0
+
+        target_mean = max(means.values()) if means else 0.0
+        if target_mean <= 1e-3:
+            stats = {
+                "needs_adjustment": False,
+                "max_gain": 1.0,
+                "target_mean": target_mean,
+                "means": means,
+            }
+            return crop, stats, None
+
+        max_gain_allowed = 1.6
+        needs_adjustment = False
+        scale_map = np.ones((h, w), dtype=np.float32)
+        max_gain_applied = 1.0
+
+        for name, mask in masks.items():
+            mean_val = means[name]
+            if mean_val <= 1e-3:
+                continue
+            gain = min(max_gain_allowed, max(1.0, target_mean / (mean_val + 1e-3)))
+            if gain > 1.02:
+                needs_adjustment = True
+            max_gain_applied = max(max_gain_applied, gain)
+            if gain > 1.0:
+                scale_map[mask] = np.maximum(scale_map[mask], gain)
+
+        if not needs_adjustment:
+            stats = {
+                "needs_adjustment": False,
+                "max_gain": max_gain_applied,
+                "target_mean": target_mean,
+                "means": means,
+            }
+            return crop, stats, None
+
+        sigma = max(1.0, min(h, w) / 30.0)
+        scale_map = cv2.GaussianBlur(scale_map, (0, 0), sigmaX=sigma, sigmaY=sigma, borderType=cv2.BORDER_REPLICATE)
+        scale_map = np.clip(scale_map, 1.0, max_gain_allowed)
+
+        L_balanced = np.clip(L * scale_map, 0, 255)
+        lab[:, :, 0] = L_balanced.astype(np.uint8)
+        balanced_crop = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+        scale_map_vis = cv2.normalize(scale_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        scale_map_vis = cv2.applyColorMap(scale_map_vis, cv2.COLORMAP_INFERNO)
+
+        stats = {
+            "needs_adjustment": True,
+            "max_gain": max_gain_applied,
+            "target_mean": target_mean,
+            "means": means,
+        }
+        return balanced_crop, stats, scale_map_vis
+
+    def _emit_final_outputs(self, idx: int, item: FacePipelineItem) -> None:
+        crop = item.final_crop
+        if crop is None or crop.size == 0:
+            print(f"  [Face {idx}] No final crop to export.")
+            return
+
+        metrics = []
+        if item.crown_to_chin_mm is not None:
+            metrics.append(f"crown-chin {item.crown_to_chin_mm:.2f} mm")
+        if item.hair_to_chin_mm is not None:
+            metrics.append(f"hair-chin {item.hair_to_chin_mm:.2f} mm")
+        if item.forehead_to_chin_mm is not None:
+            metrics.append(f"forehead-chin {item.forehead_to_chin_mm:.2f} mm")
+
+        if self.save_debug:
+            crops_dir = os.path.join(self.logdir, "stage6_final")
+            os.makedirs(crops_dir, exist_ok=True)
+
+            if item.stage5_final_crop is not None:
+                cv2.imwrite(
+                    os.path.join(crops_dir, f"face{idx:02d}_stage6_input_reference.jpg"),
+                    item.stage5_final_crop,
+                )
+
+            crop_path = os.path.join(crops_dir, f"face{idx:02d}_stage6_final_balanced.jpg")
+            cv2.imwrite(crop_path, crop)
+
+            annotated_crop = self._build_annotated_crop(item)
+            annotated_path = os.path.join(crops_dir, f"face{idx:02d}_stage6_final_guides.jpg")
+            cv2.imwrite(annotated_path, annotated_crop)
+
+            abs_coords = []
+            if item.chin_y_abs is not None:
+                abs_coords.append(f"chin y {item.chin_y_abs:.1f}")
+            if item.top_face_y_abs is not None:
+                abs_coords.append(f"forehead y {item.top_face_y_abs:.1f}")
+            if item.hair_top_y_abs is not None:
+                abs_coords.append(f"top hair y {item.hair_top_y_abs:.1f}")
+            if item.crown_y_abs is not None:
+                abs_coords.append(f"crown y {item.crown_y_abs:.1f}")
+            if item.original_bottom_y_abs is not None:
+                abs_coords.append(f"orig bottom y {item.original_bottom_y_abs:.1f}")
+
+            suffix = ""
+            details = metrics + abs_coords
+            if details:
+                suffix = " | " + " | ".join(details)
+
+            print(
+                f"  [Face {idx}] Stage 6 balanced crop {crop.shape[1]}x{crop.shape[0]}px -> {crop_path}; "
+                f"guides -> {annotated_path}{suffix}"
+            )
+        else:
+            summary = [f"size {crop.shape[1]}x{crop.shape[0]} px"] + metrics
+            print(f"  [Face {idx}] Final crop ready ({' | '.join(summary)})")
+
+    def _build_annotated_crop(self, item: FacePipelineItem) -> np.ndarray:
+        if item.final_crop is None:
+            return np.empty((0, 0, 3), dtype=np.uint8)
+
+        annotated = item.final_crop.copy()
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        label_font_scale = 0.55
+        label_thickness = 1
+
+        def annotate_line(name: str, offset: Optional[float], color: Tuple[int, int, int]) -> None:
+            if offset is None:
+                return
+            y = int(np.clip(round(offset), 0, annotated.shape[0] - 1))
+            cv2.line(annotated, (0, y), (annotated.shape[1] - 1, y), color, 2)
+            text_y = int(np.clip(y - 8, 16, annotated.shape[0] - 8))
+            cv2.putText(
+                annotated,
+                name,
+                (8, text_y + 1),
+                font,
+                label_font_scale,
+                (0, 0, 0),
+                thickness=label_thickness + 2,
+                lineType=cv2.LINE_AA,
+            )
+            cv2.putText(
+                annotated,
+                name,
+                (8, text_y),
+                font,
+                label_font_scale,
+                color,
+                thickness=label_thickness,
+                lineType=cv2.LINE_AA,
+            )
+
+        line_specs = [
+            ("Crown", item.crown_y_local, (255, 255, 0)),
+            ("Hair Top", item.hair_top_y_local, (0, 0, 255)),
+            ("Forehead", item.top_face_y_local, (0, 255, 255)),
+            ("Chin", item.chin_y_local, (0, 165, 255)),
+            ("Bottom", item.original_bottom_y_local, (255, 0, 255)),
+        ]
+
+        for name, offset, color in line_specs:
+            annotate_line(name, offset, color)
+
+        arrow_specs = [
+            (item.crown_y_local, item.chin_y_local, item.crown_to_chin_mm, (255, 255, 0)),
+            (item.hair_top_y_local, item.chin_y_local, item.hair_to_chin_mm, (0, 0, 255)),
+            (item.top_face_y_local, item.chin_y_local, item.forehead_to_chin_mm, (0, 255, 255)),
+        ]
+
+        base_x = annotated.shape[1] - 35
+        step_x = 40
+        number_font_scale = 0.8
+        number_thickness = 2
+
+        for idx, (start_offset, end_offset, value_mm, color) in enumerate(arrow_specs):
+            if start_offset is None or end_offset is None or value_mm is None:
+                continue
+            x = max(15, base_x - idx * step_x)
+            self._draw_distance_arrow(
+                annotated,
+                int(round(start_offset)),
+                int(round(end_offset)),
+                x,
+                color,
+                f"{value_mm:.2f} mm",
+                number_font_scale,
+                number_thickness,
+            )
+
+        return annotated
+
+    @staticmethod
+    def _draw_distance_arrow(
+        img: np.ndarray,
+        y_start: int,
+        y_end: int,
+        x: int,
+        color: Tuple[int, int, int],
+        label: str,
+        font_scale: float,
+        thickness: int,
+    ) -> None:
+        h, w = img.shape[:2]
+        y_top = int(np.clip(min(y_start, y_end), 0, h - 1))
+        y_bottom = int(np.clip(max(y_start, y_end), 0, h - 1))
+        if y_bottom - y_top < 2:
+            return
+
+        x = int(np.clip(x, 5, w - 5))
+        cv2.arrowedLine(img, (x, y_top), (x, y_bottom), color, 2, tipLength=0.12)
+        cv2.arrowedLine(img, (x, y_bottom), (x, y_top), color, 2, tipLength=0.12)
+
+        mid_y = (y_top + y_bottom) // 2
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        (text_w, text_h), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+
+        rect_left = x + 10
+        rect_right = rect_left + text_w + 10
+        if rect_right >= w - 5:
+            rect_left = max(5, w - text_w - 20)
+            rect_right = rect_left + text_w + 10
+
+        rect_top = max(5, mid_y - text_h // 2 - 6)
+        rect_bottom = min(h - 5, mid_y + text_h // 2 + baseline + 6)
+
+        cv2.rectangle(
+            img,
+            (rect_left, rect_top),
+            (rect_right, rect_bottom),
+            (0, 0, 0),
+            -1,
+        )
+        cv2.putText(
+            img,
+            label,
+            (rect_left + 5, rect_bottom - baseline - 3),
+            font,
+            font_scale,
+            color,
+            thickness=thickness,
+            lineType=cv2.LINE_AA,
+        )
+
+    # Debug helpers -----------------------------------------------------------
+    def _save_stage1_debug(self) -> None:
+        stage_dir = os.path.join(self.logdir, "stage1_detection")
+        os.makedirs(stage_dir, exist_ok=True)
+        path = os.path.join(stage_dir, "stage1_ratio_adjusted_boxes.jpg")
+        cv2.imwrite(path, self._create_detection_visual())
+        print(f"[Stage 1] Debug saved -> {path}")
+
+    def _save_stage2_debug(self) -> None:
+        stage_dir = os.path.join(self.logdir, "stage2_hair")
+        steps_dir = os.path.join(stage_dir, "steps")
+        os.makedirs(stage_dir, exist_ok=True)
+        os.makedirs(steps_dir, exist_ok=True)
+
+        overlay_path = os.path.join(stage_dir, "stage2_hairline_overlay.jpg")
+        cv2.imwrite(overlay_path, self._create_hair_visual())
+
+        step_names = [
+            "roi_bgr",
+            "seed_mask_color",
+            "gc_mask_color",
+            "fg_only_overlay",
+            "main_comp_overlay",
+            "band_overlay",
+        ]
+        for idx, item in enumerate(self.items, start=1):
+            for step in step_names:
+                if step in item.debug:
+                    step_path = os.path.join(steps_dir, f"face{idx:02d}_{step}.png")
+                    cv2.imwrite(step_path, item.debug[step])
+
+        print(f"[Stage 2] Debug saved -> {overlay_path} and per-face steps in {steps_dir}")
+
+    def _save_stage3_debug(self) -> None:
+        stage_dir = os.path.join(self.logdir, "stage3_boxes")
+        os.makedirs(stage_dir, exist_ok=True)
+        path = os.path.join(stage_dir, "stage3_bottom_extension_overlay.jpg")
+        cv2.imwrite(path, self._create_final_visual())
+        print(f"[Stage 3] Debug saved -> {path}")
+
+    def _save_stage5_debug(self) -> None:
+        stage_dir = os.path.join(self.logdir, "stage5_prepared")
+        os.makedirs(stage_dir, exist_ok=True)
+        for idx, item in enumerate(self.items, start=1):
+            if item.pre_scale_crop is not None:
+                pre_path = os.path.join(stage_dir, f"face{idx:02d}_stage5_prepared_crop.jpg")
+                cv2.imwrite(pre_path, item.pre_scale_crop)
+            if item.stage5_final_crop is not None:
+                scaled_path = os.path.join(stage_dir, f"face{idx:02d}_stage5_scaled_crop.jpg")
+                cv2.imwrite(scaled_path, item.stage5_final_crop)
+        print(f"[Stage 5] Debug crops saved under {stage_dir}")
+
+    def _save_stage6_lighting_debug(self, idx: int, scale_map_vis: np.ndarray) -> None:
+        stage_dir = os.path.join(self.logdir, "stage6_lighting")
+        os.makedirs(stage_dir, exist_ok=True)
+        path = os.path.join(stage_dir, f"face{idx:02d}_stage6_lighting_gain.jpg")
+        cv2.imwrite(path, scale_map_vis)
+        print(f"  [Face {idx}] Lighting gain map saved -> {path}")
 
     def _create_detection_visual(self) -> np.ndarray:
         vis = self.img.copy()
@@ -668,21 +911,6 @@ class FaceFramingPipeline:
                 cv2.line(vis, (int(round(x1)), ty), (int(round(x2)), ty), (0, 255, 255), 2)
         return vis
 
-    def _save_hair_debug_steps(self, out_dir: str) -> None:
-        steps = [
-            "roi_bgr",
-            "seed_mask_color",
-            "gc_mask_color",
-            "fg_only_overlay",
-            "main_comp_overlay",
-            "band_overlay",
-        ]
-        for idx, item in enumerate(self.items, start=1):
-            for step in steps:
-                if step in item.debug:
-                    path = os.path.join(out_dir, f"face{idx:02d}_{step}.png")
-                    cv2.imwrite(path, item.debug[step])
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Hair-aware portrait framing pipeline")
@@ -704,7 +932,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--crown-chin-min-mm", "--forehead-chin-min-mm",
                         dest="crown_chin_min_mm", type=float, default=31.0,
                         help="Minimum required crown-to-chin distance in millimetres")
-    parser.add_argument("--crown-chin-target-mm", dest="crown_chin_target_mm", type=float, default=35.0,
+    parser.add_argument("--crown-chin-target-mm", dest="crown_chin_target_mm", type=float, default=34.0,
                         help="Target crown-to-chin distance in millimetres")
     parser.add_argument("--target-height-mm", dest="target_height_mm", type=float, default=45.0,
                         help="Reference portrait height in millimetres")
