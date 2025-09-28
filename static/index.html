@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portrait Framing API Tester</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem auto;
+        max-width: 640px;
+        line-height: 1.5;
+      }
+      h1 {
+        margin-bottom: 0.5rem;
+      }
+      form {
+        border: 1px solid #ccc;
+        padding: 1.5rem;
+        border-radius: 8px;
+        background: #fafafa;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+      }
+      input[type="file"],
+      input[type="number"],
+      button {
+        margin-top: 0.25rem;
+        margin-bottom: 1rem;
+      }
+      progress {
+        width: 100%;
+        display: none;
+      }
+      #message {
+        margin-top: 1rem;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Portrait Framing API Tester</h1>
+    <p>Select an image, tweak options if needed, and submit to download the processed ZIP.</p>
+
+    <form id="upload-form">
+      <label>
+        Portrait Image
+        <input type="file" id="file" accept="image/*" required />
+      </label>
+
+      <label>
+        Target Height (mm)
+        <input type="number" id="target-height" value="45" min="1" step="0.1" />
+      </label>
+
+      <label>
+        Minimum Height (px)
+        <input type="number" id="min-height" value="540" min="1" step="1" />
+      </label>
+
+      <label>
+        Minimum Width (px)
+        <input type="number" id="min-width" value="420" min="1" step="1" />
+      </label>
+
+      <label>
+        <input type="checkbox" id="save-debug" /> Save debug assets on server
+      </label>
+
+      <button type="submit">Process Image</button>
+      <progress id="progress" max="100" value="0"></progress>
+      <div id="message"></div>
+    </form>
+
+    <script>
+      const form = document.getElementById('upload-form');
+      const message = document.getElementById('message');
+      const progress = document.getElementById('progress');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        message.textContent = '';
+
+        const fileInput = document.getElementById('file');
+        if (!fileInput.files.length) {
+          message.textContent = 'Please select an image file first.';
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('target_height_mm', document.getElementById('target-height').value);
+        formData.append('min_height_px', document.getElementById('min-height').value);
+        formData.append('min_width_px', document.getElementById('min-width').value);
+        if (document.getElementById('save-debug').checked) {
+          formData.append('save_debug', 'true');
+        }
+
+        let endpoint = '/process';
+        if (window.location.protocol === 'file:') {
+          endpoint = 'http://127.0.0.1:8000/process';
+        }
+        progress.value = 0;
+        progress.style.display = 'block';
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Server responded with ${response.status}: ${errText}`);
+          }
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', 'portrait_results.zip');
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          message.textContent = 'Download started.';
+        } catch (error) {
+          console.error(error);
+          message.textContent = `Error: ${error.message}`;
+        } finally {
+          progress.style.display = 'none';
+        }
+      });
+    </script>
+  </body>
+</html>
