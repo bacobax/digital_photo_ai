@@ -81,9 +81,13 @@ echo "=> Activating env '$ENV_NAME'..."
 conda activate "$ENV_NAME"
 
 # ---- Clone / update repo ----
+# if not
+
+
 if [ -d "$PROJECT_DIR/.git" ]; then
-  echo "=> Repo already exists. Pulling latest..."
-  git -C "$PROJECT_DIR" pull --rebase
+  echo "=> Repo already cloned. Pulling latest changes in $PROJECT_DIR ..."
+  cd "$PROJECT_DIR"
+  git pull
 else
   echo "=> Cloning repo into $PROJECT_DIR ..."
   git clone "$REPO_URL" "$PROJECT_DIR"
