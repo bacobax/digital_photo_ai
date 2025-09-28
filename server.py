@@ -6,6 +6,7 @@ import io
 import json
 import zipfile
 from typing import List
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -16,6 +17,34 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from portrait_framer import PortraitFramer, RunParameters
 
+# Frontend (React) build paths
+PROJECT_ROOT = Path(__file__).parent
+FRONTEND_DIR = PROJECT_ROOT / "build" / "client"  # expected by React Router SPA build
+LEGACY_STATIC_DIR = PROJECT_ROOT / "static"        # fallback (existing static folder)
+
+BUILD_ROOT = PROJECT_ROOT / "build"
+
+# Decide where assets live: prefer SPA client assets, else raw build/assets, else legacy static/assets
+if (FRONTEND_DIR / "assets").exists():
+    ASSETS_DIR = FRONTEND_DIR / "assets"
+elif (BUILD_ROOT / "assets").exists():
+    ASSETS_DIR = BUILD_ROOT / "assets"
+else:
+    ASSETS_DIR = LEGACY_STATIC_DIR / "assets"
+
+# Favicon resolution preference: build/client -> build root -> legacy static
+if (FRONTEND_DIR / "favicon.ico").exists():
+    FAVICON_PATH = str(FRONTEND_DIR / "favicon.ico")
+elif (BUILD_ROOT / "favicon.ico").exists():
+    FAVICON_PATH = str(BUILD_ROOT / "favicon.ico")
+else:
+    FAVICON_PATH = str(LEGACY_STATIC_DIR / "favicon.ico")
+
+# Prefer SPA build index if present, else fallback to legacy static index
+if (FRONTEND_DIR / "index.html").exists():
+    CLIENT_INDEX = str(FRONTEND_DIR / "index.html")
+else:
+    CLIENT_INDEX = str(LEGACY_STATIC_DIR / "index.html")
 
 app = FastAPI(title="Portrait Framing Service", version="1.0.0")
 app.add_middleware(
@@ -27,12 +56,31 @@ app.add_middleware(
 )
 framer = PortraitFramer()
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Serve assets from whichever resolved directory exists
+if ASSETS_DIR.exists():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(ASSETS_DIR), html=False),
+        name="assets",
+    )
+
+# Keep legacy /static available if present (useful for old index or images)
+if LEGACY_STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(LEGACY_STATIC_DIR)), name="static")
 
 
 @app.get("/", include_in_schema=False)
 async def root_page() -> FileResponse:
-    return FileResponse("static/index.html")
+    if not Path(CLIENT_INDEX).exists():
+        raise HTTPException(status_code=500, detail="Frontend index.html not found. Build the client or provide static/index.html.")
+    return FileResponse(CLIENT_INDEX)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    if Path(FAVICON_PATH).exists():
+        return FileResponse(FAVICON_PATH)
+    raise HTTPException(status_code=404, detail="favicon not found")
 
 
 def _read_image_from_upload(upload: UploadFile) -> np.ndarray:
@@ -145,3 +193,15 @@ async def process_image(
         "Content-Disposition": 'attachment; filename="portrait_results.zip"'
     }
     return StreamingResponse(archive, media_type="application/zip", headers=headers)
+
+
+# --- SPA fallback: return index.html for all other GET paths so React Router can handle routing ---
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str) -> FileResponse:
+    # Let asset requests fall through to mounted StaticFiles; for anything else serve index.html
+    # If the request contains a dot it likely targets a file; return 404 to let StaticFiles handle
+    if "." in full_path:
+        raise HTTPException(status_code=404, detail="File not found")
+    if not Path(CLIENT_INDEX).exists():
+        raise HTTPException(status_code=404, detail="index.html not found")
+    return FileResponse(CLIENT_INDEX)

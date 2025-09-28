@@ -1,5 +1,4 @@
 # Cell 0: helpers + imports
-import os
 import cv2
 import numpy as np
 

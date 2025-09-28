@@ -83,6 +83,18 @@ export default function Home() {
   const processingAreaRef = useRef<HTMLDivElement | null>(null);
   const previousStatusRef = useRef<Status>(status);
 
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const root = document.documentElement;
+    const body = document.body;
+    root.classList.add("dark");
+    body.classList.add("dark");
+    root.dataset.theme = "dark";
+    body.dataset.theme = "dark";
+  }, []);
+
   const clearPhaseTimer = useCallback(() => {
     if (phaseTimerRef.current !== null) {
       window.clearInterval(phaseTimerRef.current);
@@ -419,14 +431,12 @@ export default function Home() {
 
   const isUploadSectionCollapsed = status === "processing";
 
+  const containerClass = highContrast
+    ? "min-h-screen bg-black text-white transition-colors duration-300"
+    : "min-h-screen bg-gray-950 text-gray-100 transition-colors duration-300";
+
   return (
-    <div
-      className={
-        highContrast
-          ? "min-h-screen bg-white text-slate-900 transition-colors duration-300 dark:bg-black dark:text-white"
-          : "min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-gray-950 dark:text-gray-100"
-      }
-    >
+    <div className={containerClass}>
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-16 pt-10 sm:pt-12 lg:pt-16">
         <HeaderBar
           messages={messages}

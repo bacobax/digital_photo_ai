@@ -1,14 +1,8 @@
 import argparse
-import math
 import os
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Tuple
 
-from sympy import pprint
 from pprint import pprint
-import cv2
-import numpy as np
-from ultralytics import YOLO
 from portrait_framer import process_portraits, RunParameters
 
 

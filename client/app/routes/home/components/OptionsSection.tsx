@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import classNames from "classnames";
 
 import type { OptionsSectionProps } from "../types";
+import { CropPreview } from "./CropPreview";
 
 export function OptionsSection({
   messages,
@@ -112,6 +113,13 @@ export function OptionsSection({
               maxPercent={100}
               disabled={disabled}
             />
+            <div className="sm:col-span-2">
+              <CropPreview
+                widthHeightRatio={formValues.target_w_over_h}
+                topMarginRatio={formValues.top_margin_ratio}
+                lowerFaceRatio={formValues.bottom_upper_ratio}
+              />
+            </div>
             <NumberInput
               label={messages.maxCrownToChinLabel}
               suffix={messages.measurementUnitMm}
@@ -240,12 +248,6 @@ function RatioInput({ label, value, onChange, disabled, min, max }: RatioInputPr
   const initialParts = useMemo(() => fractionFromRatio(value), [value]);
   const [numerator, setNumerator] = useState<number>(initialParts.numerator);
   const [denominator, setDenominator] = useState<number>(initialParts.denominator);
-
-  useEffect(() => {
-    const parts = fractionFromRatio(value);
-    setNumerator(parts.numerator);
-    setDenominator(parts.denominator);
-  }, [value]);
 
   const emitChange = (nextNumerator: number, nextDenominator: number) => {
     if (!Number.isFinite(nextNumerator) || !Number.isFinite(nextDenominator) || nextDenominator <= 0) {
