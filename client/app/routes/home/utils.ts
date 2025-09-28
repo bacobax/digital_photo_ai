@@ -506,6 +506,7 @@ export function appendFormData(formData: FormData, formValues: FormValuesState) 
   formData.append("min_crown_to_chin_mm", String(formValues.min_crown_to_chin_mm));
   formData.append("target_crown_to_chin_mm", String(formValues.target_crown_to_chin_mm));
   formData.append("max_extra_padding_px", String(formValues.max_extra_padding_px));
+  formData.append("resize_scaling", String(formValues.resize_scaling));
 }
 
 export function revokeFaceObjectUrls(faces: FaceResult[]) {

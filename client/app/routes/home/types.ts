@@ -169,6 +169,7 @@ export type Messages = {
   ratioSuffix: string;
   overlayHeading: string;
   overlayLegendHeading: string;
+  resizeScalingLabel: string;
 };
 
 export type FormValuesState = {
@@ -183,6 +184,7 @@ export type FormValuesState = {
   min_crown_to_chin_mm: number;
   target_crown_to_chin_mm: number;
   max_extra_padding_px: number;
+  resize_scaling: number;
 };
 
 export type BadgeStyles = Record<BadgeTone, string>;

@@ -87,6 +87,7 @@ conda activate "$ENV_NAME"
 if [ -d "$PROJECT_DIR/.git" ]; then
   echo "=> Repo already cloned. Pulling latest changes in $PROJECT_DIR ..."
   cd "$PROJECT_DIR"
+  git stash
   git pull
 else
   echo "=> Cloning repo into $PROJECT_DIR ..."

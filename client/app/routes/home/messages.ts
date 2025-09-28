@@ -22,6 +22,7 @@ export const MESSAGES: Record<Language, Messages> = {
     minWidthLabel: "Minimum width",
     pixelsSuffix: "px",
     saveDebugLabel: "Save debug bundle on server",
+
     saveDebugDescription: "Keeps intermediate stages to help support debug issues.",
     guidelinesHeading: "Checklist before you submit",
     validationGuidelines: "Confirm each item before you continue.",
@@ -131,6 +132,7 @@ export const MESSAGES: Record<Language, Messages> = {
     ratioSuffix: "ratio",
     overlayHeading: "Interactive measurement preview",
     overlayLegendHeading: "Legend",
+    resizeScalingLabel: "Preserve quality",
   },
   it: {
     appTitle: "Assistente foto digitale",
@@ -262,6 +264,7 @@ export const MESSAGES: Record<Language, Messages> = {
     ratioSuffix: "rapporto",
     overlayHeading: "Anteprima interattiva delle misure",
     overlayLegendHeading: "Legenda",
+    resizeScalingLabel: "Mantieni qualità",
   },
   es: {
     appTitle: "Asistente de fotos digital",
@@ -393,5 +396,6 @@ export const MESSAGES: Record<Language, Messages> = {
     ratioSuffix: "relacion",
     overlayHeading: "Vista interactiva de medidas",
     overlayLegendHeading: "Leyenda",
+    resizeScalingLabel: "Mantener calidad",
   },
 };

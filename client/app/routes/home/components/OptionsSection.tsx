@@ -34,7 +34,7 @@ export function OptionsSection({
           onChange={(value) => onOptionChange("target_height_mm", value)}
           min={35}
           max={70}
-          step={0.5}
+          step={0.1}
           disabled={disabled}
         />
         <NumberInput
@@ -43,7 +43,7 @@ export function OptionsSection({
           value={formValues.min_height_px}
           onChange={(value) => onOptionChange("min_height_px", value)}
           min={200}
-          step={10}
+          step={2}
           disabled={disabled}
         />
         <NumberInput
@@ -52,7 +52,7 @@ export function OptionsSection({
           value={formValues.min_width_px}
           onChange={(value) => onOptionChange("min_width_px", value)}
           min={200}
-          step={10}
+          step={2}
           disabled={disabled}
         />
         <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 shadow-inner dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -103,6 +103,14 @@ export function OptionsSection({
               onChange={(value) => onOptionChange("top_margin_ratio", value)}
               minPercent={0}
               maxPercent={50}
+              disabled={disabled}
+            />
+            <PercentageSlider
+              label={messages.resizeScalingLabel}
+              value={formValues.resize_scaling}
+              onChange={(value) => onOptionChange("resize_scaling", value)}
+              minPercent={0}
+              maxPercent={100}
               disabled={disabled}
             />
             <PercentageSlider

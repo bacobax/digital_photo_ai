@@ -493,12 +493,14 @@ class FaceFramingPipeline:
                 resize_scaling = 0.0
             resize_scaling = max(0.0, min(1.0, resize_scaling))
 
-            scaled_height = int(round(crop_h * resize_scaling))
-            target_height_px = max(self.params.min_height_px, scaled_height)
-            target_height_px = max(1, target_height_px)
+            # Compute minimum scale to satisfy min_height_px and interpolate up to 1.0.
+            min_scale = float(self.params.min_height_px) / max(1.0, float(crop_h))
+            scale = min_scale + (1.0 - min_scale) * resize_scaling
+            scale = max(scale, min_scale)  # never go below the minimum required
 
-            scale = target_height_px / max(1, crop_h)
+            target_height_px = max(1, int(round(crop_h * scale)))
             target_width_px = max(1, int(round(crop_w * scale)))
+
             final_crop = cv2.resize(
                 crop,
                 (target_width_px, target_height_px),

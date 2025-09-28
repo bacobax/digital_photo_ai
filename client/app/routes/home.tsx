@@ -75,6 +75,7 @@ export default function Home() {
     min_crown_to_chin_mm: 31,
     target_crown_to_chin_mm: 34,
     max_extra_padding_px: 600,
+    resize_scaling: 0,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
