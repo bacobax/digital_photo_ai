@@ -95,10 +95,10 @@ cd "$PROJECT_DIR"
 echo "=> Installing Python requirements..."
 # Prefer pip from the conda env
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # ---- Start FastAPI server ----
-echo "=> Starting FastAPI (uvicorn) on port $PORT ..."
+echo "=> Starting FastAPI (uvicorn) on host http://localhost:$PORT ..."
 # If uvicorn isn’t in requirements, install it:
-python -c "import uvicorn" 2>/dev/null || pip install uvicorn[standard]
+python -c "import uvicorn" 2>/dev/null || python -m pip install 'uvicorn[standard]'
 exec uvicorn server:app --host 0.0.0.0 --port "$PORT"

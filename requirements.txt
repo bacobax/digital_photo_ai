@@ -3,3 +3,4 @@ depthai >= 2.10
 fastapi
 uvicorn
 ultralytics
+python-multipart
