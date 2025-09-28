@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import io
+import math
 import json
 import zipfile
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 
 import cv2
@@ -94,6 +95,20 @@ def _read_image_from_upload(upload: UploadFile) -> np.ndarray:
     return image
 
 
+def _clamp_resize_scaling(value: Optional[float]) -> float:
+    """Normalise user-provided scaling factor to [0, 1]."""
+
+    if value is None:
+        return 0.0
+    try:
+        value_f = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if math.isnan(value_f):
+        return 0.0
+    return max(0.0, min(1.0, value_f))
+
+
 # Helper: encode JPEG bytes with DPI for physical size (e.g. 35x45mm)
 def _encode_jpeg_with_dpi(bgr_np: np.ndarray, width_mm: float, height_mm: float, quality: int = 95) -> bytes:
     """Return JPEG bytes encoded with DPI so editors show correct 35×45 mm size.
@@ -122,6 +137,7 @@ async def process_image(
     target_height_mm: float = Form(45.0),
     min_height_px: int = Form(540),
     min_width_px: int = Form(420),
+    resize_scaling: float = Form(0.0),
     max_crown_to_chin_mm: float = Form(36.0),
     min_crown_to_chin_mm: float = Form(31.0),
     target_crown_to_chin_mm: float = Form(34.0),
@@ -136,6 +152,7 @@ async def process_image(
     print(f"  target_height_mm: {target_height_mm}")
     print(f"  min_height_px: {min_height_px}")
     print(f"  min_width_px: {min_width_px}")
+    print(f"  resize_scaling: {resize_scaling}")
     print(f"  max_crown_to_chin_mm: {max_crown_to_chin_mm}")
     print(f"  min_crown_to_chin_mm: {min_crown_to_chin_mm}")
     print(f"  target_crown_to_chin_mm: {target_crown_to_chin_mm}")
@@ -148,6 +165,7 @@ async def process_image(
         target_height_mm=target_height_mm,
         min_height_px=min_height_px,
         min_width_px=min_width_px,
+        resize_scaling=_clamp_resize_scaling(resize_scaling),
         max_crown_to_chin_mm=max_crown_to_chin_mm,
         min_crown_to_chin_mm=min_crown_to_chin_mm,
         target_crown_to_chin_mm=target_crown_to_chin_mm,

@@ -74,6 +74,7 @@ class RunParameters:
     min_crown_to_chin_mm: float = 31.0
     target_crown_to_chin_mm: float = 34.0
     max_extra_padding_px: int = 600
+    resize_scaling: float = 0.0
 
 
 class FaceFramingPipeline:
@@ -473,7 +474,7 @@ class FaceFramingPipeline:
 
     # Stage 6 -----------------------------------------------------------------
     def _resize_crops_and_map_mm(self) -> None:
-        print("[Stage 6] Resizing to minimum size and mapping chin→crown span…")
+        print("[Stage 6] Resizing to target size (>= minimum) and mapping chin→crown span…")
         for idx, item in enumerate(self.items, start=1):
             crop = item.pre_scale_crop
             if crop is None or crop.size == 0:
@@ -487,7 +488,15 @@ class FaceFramingPipeline:
             forehead = item.top_face_y_local
             bottom = item.original_bottom_y_local
 
-            target_height_px = max(1, self.params.min_height_px)
+            resize_scaling = float(getattr(self.params, "resize_scaling", 0.0))
+            if not math.isfinite(resize_scaling):
+                resize_scaling = 0.0
+            resize_scaling = max(0.0, min(1.0, resize_scaling))
+
+            scaled_height = int(round(crop_h * resize_scaling))
+            target_height_px = max(self.params.min_height_px, scaled_height)
+            target_height_px = max(1, target_height_px)
+
             scale = target_height_px / max(1, crop_h)
             target_width_px = max(1, int(round(crop_w * scale)))
             final_crop = cv2.resize(
@@ -626,7 +635,7 @@ class FaceFramingPipeline:
         os.makedirs(crops_dir, exist_ok=True)
 
         crop_path = os.path.join(crops_dir, f"face{idx:02d}_crop.jpg")
-        cv2.imwrite(crop_path, final_crop)
+        self._save_with_dpi(final_crop, crop_path)
 
         guides = final_crop.copy()
         height, width = guides.shape[:2]
@@ -663,7 +672,7 @@ class FaceFramingPipeline:
             y_text += 18
 
         guides_path = os.path.join(crops_dir, f"face{idx:02d}_crop_guides.jpg")
-        cv2.imwrite(guides_path, guides)
+        self._save_with_dpi(guides, guides_path)
 
     def _apply_partition_lighting_balance(
         self, crop: np.ndarray

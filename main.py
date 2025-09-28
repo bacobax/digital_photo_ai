@@ -1,6 +1,7 @@
 import argparse
+import math
 import os
-from typing import Tuple
+from typing import Optional, Tuple
 
 from pprint import pprint
 from portrait_framer import process_portraits, RunParameters
@@ -10,6 +11,20 @@ Box = Tuple[float, float, float, float]
 
 
 
+
+
+def _clamp_resize_scaling(value: Optional[float]) -> float:
+    """Clamp user-provided scaling to [0, 1]; default to 0 for legacy behaviour."""
+
+    if value is None:
+        return 0.0
+    try:
+        value_f = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if math.isnan(value_f):
+        return 0.0
+    return max(0.0, min(1.0, value_f))
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,6 +41,8 @@ def parse_args() -> argparse.Namespace:
                         help="Minimum width of the final crop in pixels")
     parser.add_argument("--min-height-px", dest="min_height_px", type=int, default=540,
                         help="Minimum height of the final crop in pixels")
+    parser.add_argument("--resize-scaling", dest="resize_scaling", type=float, default=None,
+                        help="Optional scaling factor (0-1) applied to the pre-resize crop height/width")
     parser.add_argument("--crown-chin-max-mm", "--hair-chin-max-mm",
                         dest="crown_chin_max_mm", type=float, default=36.0,
                         help="Maximum allowed crown-to-chin distance in millimetres")
@@ -52,6 +69,7 @@ def main(args: argparse.Namespace) -> None:
         max_crown_to_chin_mm=args.crown_chin_max_mm,
         min_crown_to_chin_mm=args.crown_chin_min_mm,
         target_crown_to_chin_mm=args.crown_chin_target_mm,
+        resize_scaling=_clamp_resize_scaling(args.resize_scaling),
     )
 
     save_debug = not args.no_debug
@@ -61,7 +79,8 @@ def main(args: argparse.Namespace) -> None:
     print(f"Input image: {args.img_path}")
     print(
         f"Params | ratio {params.target_w_over_h:.3f} | top margin {params.top_margin_ratio:.3f} | "
-        f"bottom upper {params.bottom_upper_ratio:.3f} | min size {params.min_width_px}x{params.min_height_px}"
+        f"bottom upper {params.bottom_upper_ratio:.3f} | min size {params.min_width_px}x{params.min_height_px} | "
+        f"resize scaling {params.resize_scaling:.2f}"
     )
     if not save_debug:
         print("[Info] Debug image saving disabled; results kept in memory only.")
