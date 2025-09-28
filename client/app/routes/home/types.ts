@@ -33,11 +33,34 @@ export type ImageAsset = {
   filename: string;
 };
 
+export type FaceMarkerKey = "crown" | "forehead" | "chin";
+
+export type FaceMarker = {
+  key: FaceMarkerKey;
+  label: string;
+  distanceFromBottomPx: number | null;
+  distanceFromBottomMm: number | null;
+};
+
+export type FaceSpanKey = "crownToChin" | "foreheadToChin";
+
+export type FaceSpan = {
+  key: FaceSpanKey;
+  label: string;
+  startKey: FaceMarkerKey;
+  endKey: FaceMarkerKey;
+  pixels: number | null;
+  millimeters: number | null;
+};
+
 export type FaceResult = {
   id: string;
   balanced: ImageAsset | null;
   annotated: ImageAsset | null;
   metrics: NormalizedMeasurement[];
+  markers: FaceMarker[];
+  spans: FaceSpan[];
+  pxPerMm: number | null;
 };
 
 export type Toast = {
@@ -107,6 +130,7 @@ export type Messages = {
   measurementUnitPxPerMm: string;
   measurementUnitPx: string;
   measurementFallback: string;
+  markerLabels: Record<FaceMarkerKey, string>;
   faceLabel: string;
   facePosition: string;
   faceSelectorPrev: string;
@@ -143,20 +167,22 @@ export type Messages = {
   targetCrownToChinLabel: string;
   maxExtraPaddingLabel: string;
   ratioSuffix: string;
+  overlayHeading: string;
+  overlayLegendHeading: string;
 };
 
 export type FormValuesState = {
-  targetHeightMm: number;
-  minHeightPx: number;
-  minWidthPx: number;
-  saveDebug: boolean;
-  targetWOverH: number;
-  topMarginRatio: number;
-  bottomUpperRatio: number;
-  maxCrownToChinMm: number;
-  minCrownToChinMm: number;
-  targetCrownToChinMm: number;
-  maxExtraPaddingPx: number;
+  save_debug: boolean;
+  target_w_over_h: number;
+  top_margin_ratio: number;
+  bottom_upper_ratio: number;
+  target_height_mm: number;
+  min_height_px: number;
+  min_width_px: number;
+  max_crown_to_chin_mm: number;
+  min_crown_to_chin_mm: number;
+  target_crown_to_chin_mm: number;
+  max_extra_padding_px: number;
 };
 
 export type BadgeStyles = Record<BadgeTone, string>;
@@ -212,6 +238,13 @@ export type ResultsSectionProps = {
   onDownloadAsset: (asset: ImageAsset | null) => void;
   zipBlob: Blob | null;
   badgeStyles: BadgeStyles;
+};
+
+export type AnnotatedPreviewProps = {
+  image: ImageAsset | null;
+  markers: FaceMarker[];
+  spans: FaceSpan[];
+  messages: Messages;
 };
 
 export type ToastBannerProps = {

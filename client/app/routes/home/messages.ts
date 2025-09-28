@@ -88,6 +88,11 @@ export const MESSAGES: Record<Language, Messages> = {
     measurementUnitPxPerMm: "px/mm",
     measurementUnitPx: "px",
     measurementFallback: "Measurement",
+    markerLabels: {
+      crown: "Crown",
+      forehead: "Forehead",
+      chin: "Chin",
+    },
     faceLabel: "Face",
     facePosition: "Face {current} of {total}",
     faceSelectorPrev: "Previous face",
@@ -124,6 +129,8 @@ export const MESSAGES: Record<Language, Messages> = {
     targetCrownToChinLabel: "Target crown to chin",
     maxExtraPaddingLabel: "Max extra padding",
     ratioSuffix: "ratio",
+    overlayHeading: "Interactive measurement preview",
+    overlayLegendHeading: "Legend",
   },
   it: {
     appTitle: "Assistente foto digitale",
@@ -212,6 +219,11 @@ export const MESSAGES: Record<Language, Messages> = {
     measurementUnitPxPerMm: "px/mm",
     measurementUnitPx: "px",
     measurementFallback: "Misura",
+    markerLabels: {
+      crown: "Sommità",
+      forehead: "Fronte",
+      chin: "Mento",
+    },
     faceLabel: "Volto",
     facePosition: "Volto {current} di {total}",
     faceSelectorPrev: "Volto precedente",
@@ -248,6 +260,8 @@ export const MESSAGES: Record<Language, Messages> = {
     targetCrownToChinLabel: "Distanza ideale testa-mento",
     maxExtraPaddingLabel: "Padding extra massimo",
     ratioSuffix: "rapporto",
+    overlayHeading: "Anteprima interattiva delle misure",
+    overlayLegendHeading: "Legenda",
   },
   es: {
     appTitle: "Asistente de fotos digital",
@@ -336,6 +350,11 @@ export const MESSAGES: Record<Language, Messages> = {
     measurementUnitPxPerMm: "px/mm",
     measurementUnitPx: "px",
     measurementFallback: "Medida",
+    markerLabels: {
+      crown: "Coronilla",
+      forehead: "Frente",
+      chin: "Barbilla",
+    },
     faceLabel: "Cara",
     facePosition: "Cara {current} de {total}",
     faceSelectorPrev: "Cara anterior",
@@ -372,5 +391,7 @@ export const MESSAGES: Record<Language, Messages> = {
     targetCrownToChinLabel: "Objetivo coronilla-menton",
     maxExtraPaddingLabel: "Padding extra maximo",
     ratioSuffix: "relacion",
+    overlayHeading: "Vista interactiva de medidas",
+    overlayLegendHeading: "Leyenda",
   },
 };

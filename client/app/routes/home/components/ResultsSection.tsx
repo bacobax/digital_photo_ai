@@ -1,5 +1,6 @@
 import classNames from "classnames";
 
+import { AnnotatedPreview } from "./AnnotatedPreview";
 import type { ResultsSectionProps } from "../types";
 
 export function ResultsSection({
@@ -146,19 +147,14 @@ export function ResultsSection({
             </figure>
             <figure className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center shadow-inner dark:border-slate-700 dark:bg-slate-800">
               <figcaption className="mb-3 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                {messages.downloadAnnotated}
+                {messages.overlayHeading}
               </figcaption>
-              {currentFace.annotated ? (
-                <img
-                  src={currentFace.annotated.url}
-                  alt={messages.annotatedAlt}
-                  className="mx-auto aspect-[35/45] w-full max-w-xs rounded-lg border border-slate-200 object-cover shadow-sm dark:border-slate-700"
-                />
-              ) : (
-                <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  {messages.loadingPlaceholder}
-                </div>
-              )}
+              <AnnotatedPreview
+                image={currentFace.balanced}
+                markers={currentFace.markers}
+                spans={currentFace.spans}
+                messages={messages}
+              />
               <button
                 type="button"
                 onClick={() => onDownloadAsset(currentFace.annotated)}

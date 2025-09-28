@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import classNames from "classnames";
 import FileSaver from "file-saver";
 
 import {
@@ -63,22 +64,24 @@ export default function Home() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [formValues, setFormValues] = useState<FormValuesState>({
-    targetHeightMm: 45,
-    minHeightPx: 540,
-    minWidthPx: 420,
-    saveDebug: false,
-    targetWOverH: 7 / 9,
-    topMarginRatio: 0.1,
-    bottomUpperRatio: 0.8,
-    maxCrownToChinMm: 36,
-    minCrownToChinMm: 31,
-    targetCrownToChinMm: 34,
-    maxExtraPaddingPx: 600,
+    target_height_mm: 45,
+    min_height_px: 540,
+    min_width_px: 420,
+    save_debug: false,
+    target_w_over_h: 7 / 9,
+    top_margin_ratio: 0.1,
+    bottom_upper_ratio: 0.8,
+    max_crown_to_chin_mm: 36,
+    min_crown_to_chin_mm: 31,
+    target_crown_to_chin_mm: 34,
+    max_extra_padding_px: 600,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const phaseTimerRef = useRef<number | null>(null);
+  const processingAreaRef = useRef<HTMLDivElement | null>(null);
+  const previousStatusRef = useRef<Status>(status);
 
   const clearPhaseTimer = useCallback(() => {
     if (phaseTimerRef.current !== null) {
@@ -152,6 +155,15 @@ export default function Home() {
       window.clearTimeout(timeoutId);
     };
   }, [toast]);
+
+  useEffect(() => {
+    if (status === "processing" && previousStatusRef.current !== "processing") {
+      window.requestAnimationFrame(() => {
+        processingAreaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+    previousStatusRef.current = status;
+  }, [status]);
 
   const handleRemoveFile = useCallback(() => {
     setFile(null);
@@ -243,7 +255,7 @@ export default function Home() {
   const handleToggleDebug = useCallback(() => {
     setFormValues((previous) => ({
       ...previous,
-      saveDebug: !previous.saveDebug,
+      save_debug: !previous.save_debug,
     }));
   }, []);
 
@@ -268,10 +280,11 @@ export default function Home() {
     const formData = new FormData();
     formData.append("file", file);
     appendFormData(formData, formValues);
-    if (formValues.saveDebug) {
+    if (formValues.save_debug) {
       formData.append("save_debug", "true");
     }
-
+    
+    console.log({formData})
     try {
       const endpoint = resolveApiEndpoint();
       const response = await fetch(endpoint, {
@@ -404,6 +417,8 @@ export default function Home() {
     });
   }, [faceResults.length]);
 
+  const isUploadSectionCollapsed = status === "processing";
+
   return (
     <div
       className={
@@ -429,22 +444,32 @@ export default function Home() {
           aria-busy={status === "processing"}
         >
           <div className="space-y-6">
-            <UploadSection
-              messages={messages}
-              status={status}
-              isDragActive={isDragActive}
-              file={file}
-              filePreview={filePreview}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onOpenFileDialog={handleOpenFileDialog}
-              onOpenCameraDialog={handleOpenCameraDialog}
-              onFileInputChange={handleIncomingFile}
-              onRemoveFile={handleRemoveFile}
-              fileInputRef={fileInputRef}
-              cameraInputRef={cameraInputRef}
-            />
+            <div
+              className={classNames(
+                "overflow-hidden transition-[max-height,opacity] duration-500 ease-out",
+                isUploadSectionCollapsed
+                  ? "pointer-events-none max-h-0 opacity-0"
+                  : "max-h-[1600px] opacity-100",
+              )}
+              aria-hidden={isUploadSectionCollapsed}
+            >
+              <UploadSection
+                messages={messages}
+                status={status}
+                isDragActive={isDragActive}
+                file={file}
+                filePreview={filePreview}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onOpenFileDialog={handleOpenFileDialog}
+                onOpenCameraDialog={handleOpenCameraDialog}
+                onFileInputChange={handleIncomingFile}
+                onRemoveFile={handleRemoveFile}
+                fileInputRef={fileInputRef}
+                cameraInputRef={cameraInputRef}
+              />
+            </div>
 
             <OptionsSection
               messages={messages}
@@ -462,13 +487,15 @@ export default function Home() {
           </aside>
         </form>
 
-        <PhaseTracker
-          messages={messages}
-          statusLabel={statusLabel}
-          phaseStatusText={phaseStatusText}
-          progressPercent={progressPercent}
-          phaseIndex={phaseIndex}
-        />
+        <div ref={processingAreaRef}>
+          <PhaseTracker
+            messages={messages}
+            statusLabel={statusLabel}
+            phaseStatusText={phaseStatusText}
+            progressPercent={progressPercent}
+            phaseIndex={phaseIndex}
+          />
+        </div>
 
         <ResultsSection
           status={status}

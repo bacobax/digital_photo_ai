@@ -10,7 +10,11 @@ import {
   MAX_FILE_SIZE,
 } from "./constants";
 import type {
+  FaceMarker,
+  FaceMarkerKey,
   FaceResult,
+  FaceSpan,
+  FaceSpanKey,
   FormValuesState,
   ImageAsset,
   Messages,
@@ -62,18 +66,40 @@ function formatLabelFromKey(rawKey: string, fallback: string) {
 }
 
 function formatMeasurementValue(
+  rawKey: string,
   rawValue: unknown,
   messages: Messages,
   measurementKey: MeasurementLabelKey | null,
 ) {
+  const normalizedKey = rawKey.toLowerCase();
+  const indicatesMm =
+    measurementKey === "crownToChin" ||
+    measurementKey === "foreheadToChin" ||
+    measurementKey === "hairToChin" ||
+    normalizedKey.includes("mm") ||
+    normalizedKey.includes("millimeter") ||
+    normalizedKey.includes("millimetre");
+  const indicatesPxPerMm = measurementKey === "pixelsPerMm";
+  const indicatesPx = normalizedKey.includes("px") || normalizedKey.includes("pixel");
+  const indicatesRatio =
+    normalizedKey.includes("ratio") ||
+    normalizedKey.includes("percent") ||
+    normalizedKey.includes("percentage");
+
   if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
-    if (measurementKey === "pixelsPerMm") {
+    if (indicatesPxPerMm) {
       return `${rawValue.toFixed(2)} ${messages.measurementUnitPxPerMm}`;
     }
-    if (measurementKey && measurementKey.includes("chin")) {
+    if (indicatesMm) {
       return `${rawValue.toFixed(1)} ${messages.measurementUnitMm}`;
     }
-    return `${rawValue.toFixed(0)} ${messages.measurementUnitPx}`;
+    if (indicatesPx) {
+      return `${rawValue.toFixed(0)} ${messages.measurementUnitPx}`;
+    }
+    if (indicatesRatio) {
+      return rawValue.toFixed(2);
+    }
+    return rawValue.toString();
   }
 
   if (typeof rawValue === "string" && rawValue.trim().length > 0) {
@@ -119,7 +145,7 @@ function buildMeasurements(source: unknown, messages: Messages) {
     const label = measurementKey
       ? messages.measurementLabels[measurementKey]
       : formatLabelFromKey(rawKey, messages.measurementFallback);
-    const value = formatMeasurementValue(rawValue, messages, measurementKey);
+    const value = formatMeasurementValue(rawKey, rawValue, messages, measurementKey);
 
     if (!value) {
       continue;
@@ -129,6 +155,137 @@ function buildMeasurements(source: unknown, messages: Messages) {
   }
 
   return result;
+}
+
+type RawFaceMetadata = Record<string, unknown>;
+
+type NormalizedFaceMetadata = {
+  metrics: NormalizedMeasurement[];
+  raw: RawFaceMetadata | null;
+};
+
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function pickValue(source: RawFaceMetadata | null, keys: string[]) {
+  if (!source) {
+    return undefined;
+  }
+  for (const key of keys) {
+    if (key in source) {
+      return source[key];
+    }
+  }
+  return undefined;
+}
+
+function buildMarkers(raw: RawFaceMetadata | null, messages: Messages, pxPerMm: number | null) {
+  if (!raw) {
+    return [] as FaceMarker[];
+  }
+
+  const markerDefinitions: Array<{ key: FaceMarkerKey; pxKeys: string[]; mmKeys: string[] }> = [
+    { key: "crown", pxKeys: ["crown_px", "crownPx"], mmKeys: ["crown_mm", "crownMm"] },
+    { key: "forehead", pxKeys: ["forehead_px", "foreheadPx"], mmKeys: ["forehead_mm", "foreheadMm"] },
+    { key: "chin", pxKeys: ["chin_px", "chinPx"], mmKeys: ["chin_mm", "chinMm"] },
+  ];
+
+  return markerDefinitions
+    .map<FaceMarker | null>((definition) => {
+      const pxValue = coerceNumber(pickValue(raw, definition.pxKeys));
+      const mmFromMetadata = coerceNumber(pickValue(raw, definition.mmKeys));
+      if (pxValue === null) {
+        return null;
+      }
+      const millimeters = mmFromMetadata ?? (pxPerMm ? pxValue / pxPerMm : null);
+      return {
+        key: definition.key,
+        label: messages.markerLabels[definition.key],
+        distanceFromBottomPx: pxValue,
+        distanceFromBottomMm: millimeters,
+      } satisfies FaceMarker;
+    })
+    .filter((marker): marker is FaceMarker => marker !== null);
+}
+
+function buildSpans(
+  raw: RawFaceMetadata | null,
+  markers: FaceMarker[],
+  pxPerMm: number | null,
+  messages: Messages,
+) {
+  if (!raw || markers.length === 0) {
+    return [] as FaceSpan[];
+  }
+
+  const markerMap = new Map<FaceMarkerKey, FaceMarker>(markers.map((marker) => [marker.key, marker]));
+  const spanDefinitions: Array<{
+    key: FaceSpanKey;
+    start: FaceMarkerKey;
+    end: FaceMarkerKey;
+    mmKeys: string[];
+    label: string;
+  }> = [
+    {
+      key: "crownToChin",
+      start: "crown",
+      end: "chin",
+      mmKeys: ["crown_to_chin_mm", "crownToChinMm"],
+      label: messages.measurementLabels.crownToChin,
+    },
+    {
+      key: "foreheadToChin",
+      start: "forehead",
+      end: "chin",
+      mmKeys: ["forehead_to_chin_mm", "foreheadToChinMm"],
+      label: messages.measurementLabels.foreheadToChin,
+    },
+  ];
+
+  return spanDefinitions
+    .map<FaceSpan | null>((definition) => {
+      const startMarker = markerMap.get(definition.start);
+      const endMarker = markerMap.get(definition.end);
+      if (!startMarker || !endMarker) {
+        return null;
+      }
+      const pxSpan =
+        startMarker.distanceFromBottomPx !== null && endMarker.distanceFromBottomPx !== null
+          ? Math.abs(startMarker.distanceFromBottomPx - endMarker.distanceFromBottomPx)
+          : null;
+      const mmFromMetadata = coerceNumber(pickValue(raw, definition.mmKeys));
+      const millimeters =
+        mmFromMetadata ?? (pxPerMm && pxSpan !== null ? pxSpan / pxPerMm : null);
+      if (pxSpan === null && millimeters === null) {
+        return null;
+      }
+      return {
+        key: definition.key,
+        label: definition.label,
+        startKey: definition.start,
+        endKey: definition.end,
+        pixels: pxSpan,
+        millimeters,
+      } satisfies FaceSpan;
+    })
+    .filter((span): span is FaceSpan => span !== null);
+}
+
+function buildFaceGuides(raw: RawFaceMetadata | null, messages: Messages) {
+  const pxPerMm = coerceNumber(pickValue(raw, ["px_per_mm", "pxPerMm"]));
+  const markers = buildMarkers(raw, messages, pxPerMm);
+  const spans = buildSpans(raw, markers, pxPerMm, messages);
+  return { markers, spans, pxPerMm: pxPerMm ?? null };
 }
 
 function extractMeasurementSource(payload: unknown) {
@@ -171,7 +328,7 @@ function resolveFaceIdentifier(face: unknown, index: number) {
 }
 
 export function normalizeMetadataFaces(metadata: unknown, messages: Messages) {
-  const normalized: Record<string, NormalizedMeasurement[]> = {};
+  const normalized: Record<string, NormalizedFaceMetadata> = {};
 
   if (!metadata) {
     return normalized;
@@ -195,9 +352,8 @@ export function normalizeMetadataFaces(metadata: unknown, messages: Messages) {
   facesQueue.forEach(({ id, payload }) => {
     const measurementSource = extractMeasurementSource(payload);
     const metrics = buildMeasurements(measurementSource, messages);
-    if (metrics.length > 0) {
-      normalized[id] = metrics;
-    }
+    const raw = payload && typeof payload === "object" ? (payload as RawFaceMetadata) : null;
+    normalized[id] = { metrics, raw };
   });
 
   return normalized;
@@ -304,12 +460,17 @@ export async function parseZipArchive(blob: Blob, messages: Messages) {
   const orderedFaceIds = Array.from(faceIds).sort();
   const combinedFaces: FaceResult[] = orderedFaceIds.map((id) => {
     const assets = assetsMap.get(id) ?? {};
+    const metadata = metadataByFace[id];
+    const guides = buildFaceGuides(metadata?.raw ?? null, messages);
     return {
       id,
       balanced: assets.balanced ?? null,
       annotated: assets.annotated ?? null,
-      metrics: metadataByFace[id] ?? [],
-    };
+      metrics: metadata?.metrics ?? [],
+      markers: guides.markers,
+      spans: guides.spans,
+      pxPerMm: guides.pxPerMm,
+    } satisfies FaceResult;
   });
 
   return combinedFaces;
@@ -335,16 +496,16 @@ export function validateIncomingFile(file: File | null) {
 }
 
 export function appendFormData(formData: FormData, formValues: FormValuesState) {
-  formData.append("target_height_mm", String(formValues.targetHeightMm));
-  formData.append("min_height_px", String(formValues.minHeightPx));
-  formData.append("min_width_px", String(formValues.minWidthPx));
-  formData.append("target_w_over_h", String(formValues.targetWOverH));
-  formData.append("top_margin_ratio", String(formValues.topMarginRatio));
-  formData.append("bottom_upper_ratio", String(formValues.bottomUpperRatio));
-  formData.append("max_crown_to_chin_mm", String(formValues.maxCrownToChinMm));
-  formData.append("min_crown_to_chin_mm", String(formValues.minCrownToChinMm));
-  formData.append("target_crown_to_chin_mm", String(formValues.targetCrownToChinMm));
-  formData.append("max_extra_padding_px", String(formValues.maxExtraPaddingPx));
+  formData.append("target_height_mm", String(formValues.target_height_mm));
+  formData.append("min_height_px", String(formValues.min_height_px));
+  formData.append("min_width_px", String(formValues.min_width_px));
+  formData.append("target_w_over_h", String(formValues.target_w_over_h));
+  formData.append("top_margin_ratio", String(formValues.top_margin_ratio));
+  formData.append("bottom_upper_ratio", String(formValues.bottom_upper_ratio));
+  formData.append("max_crown_to_chin_mm", String(formValues.max_crown_to_chin_mm));
+  formData.append("min_crown_to_chin_mm", String(formValues.min_crown_to_chin_mm));
+  formData.append("target_crown_to_chin_mm", String(formValues.target_crown_to_chin_mm));
+  formData.append("max_extra_padding_px", String(formValues.max_extra_padding_px));
 }
 
 export function revokeFaceObjectUrls(faces: FaceResult[]) {

@@ -28,8 +28,8 @@ export function OptionsSection({
         <NumberInput
           label={messages.targetHeightLabel}
           suffix={messages.targetHeightSuffix}
-          value={formValues.targetHeightMm}
-          onChange={(value) => onOptionChange("targetHeightMm", value)}
+          value={formValues.target_height_mm}
+          onChange={(value) => onOptionChange("target_height_mm", value)}
           min={35}
           max={70}
           step={0.5}
@@ -38,8 +38,8 @@ export function OptionsSection({
         <NumberInput
           label={messages.minHeightLabel}
           suffix={messages.pixelsSuffix}
-          value={formValues.minHeightPx}
-          onChange={(value) => onOptionChange("minHeightPx", value)}
+          value={formValues.min_height_px}
+          onChange={(value) => onOptionChange("min_height_px", value)}
           min={200}
           step={10}
           disabled={disabled}
@@ -47,8 +47,8 @@ export function OptionsSection({
         <NumberInput
           label={messages.minWidthLabel}
           suffix={messages.pixelsSuffix}
-          value={formValues.minWidthPx}
-          onChange={(value) => onOptionChange("minWidthPx", value)}
+          value={formValues.min_width_px}
+          onChange={(value) => onOptionChange("min_width_px", value)}
           min={200}
           step={10}
           disabled={disabled}
@@ -56,7 +56,7 @@ export function OptionsSection({
         <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 shadow-inner dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
           <input
             type="checkbox"
-            checked={formValues.saveDebug}
+            checked={formValues.save_debug}
             onChange={onToggleDebug}
             disabled={disabled}
             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-400 dark:border-slate-600 dark:bg-slate-900"
@@ -90,8 +90,8 @@ export function OptionsSection({
             <NumberInput
               label={messages.targetRatioLabel}
               suffix={messages.ratioSuffix}
-              value={formValues.targetWOverH}
-              onChange={(value) => onOptionChange("targetWOverH", value)}
+              value={formValues.target_w_over_h}
+              onChange={(value) => onOptionChange("target_w_over_h", value)}
               step={0.01}
               min={0.5}
               max={1.5}
@@ -99,8 +99,8 @@ export function OptionsSection({
             />
             <NumberInput
               label={messages.topMarginLabel}
-              value={formValues.topMarginRatio}
-              onChange={(value) => onOptionChange("topMarginRatio", value)}
+              value={formValues.top_margin_ratio}
+              onChange={(value) => onOptionChange("top_margin_ratio", value)}
               step={0.01}
               min={0}
               max={0.5}
@@ -108,8 +108,8 @@ export function OptionsSection({
             />
             <NumberInput
               label={messages.bottomUpperLabel}
-              value={formValues.bottomUpperRatio}
-              onChange={(value) => onOptionChange("bottomUpperRatio", value)}
+              value={formValues.bottom_upper_ratio}
+              onChange={(value) => onOptionChange("bottom_upper_ratio", value)}
               step={0.01}
               min={0.5}
               max={1}
@@ -118,8 +118,8 @@ export function OptionsSection({
             <NumberInput
               label={messages.maxCrownToChinLabel}
               suffix={messages.measurementUnitMm}
-              value={formValues.maxCrownToChinMm}
-              onChange={(value) => onOptionChange("maxCrownToChinMm", value)}
+              value={formValues.max_crown_to_chin_mm}
+              onChange={(value) => onOptionChange("max_crown_to_chin_mm", value)}
               step={0.5}
               min={10}
               max={60}
@@ -128,8 +128,8 @@ export function OptionsSection({
             <NumberInput
               label={messages.minCrownToChinLabel}
               suffix={messages.measurementUnitMm}
-              value={formValues.minCrownToChinMm}
-              onChange={(value) => onOptionChange("minCrownToChinMm", value)}
+              value={formValues.min_crown_to_chin_mm}
+              onChange={(value) => onOptionChange("min_crown_to_chin_mm", value)}
               step={0.5}
               min={10}
               max={60}
@@ -138,8 +138,8 @@ export function OptionsSection({
             <NumberInput
               label={messages.targetCrownToChinLabel}
               suffix={messages.measurementUnitMm}
-              value={formValues.targetCrownToChinMm}
-              onChange={(value) => onOptionChange("targetCrownToChinMm", value)}
+              value={formValues.target_crown_to_chin_mm}
+              onChange={(value) => onOptionChange("target_crown_to_chin_mm", value)}
               step={0.5}
               min={10}
               max={60}
@@ -148,8 +148,8 @@ export function OptionsSection({
             <NumberInput
               label={messages.maxExtraPaddingLabel}
               suffix={messages.pixelsSuffix}
-              value={formValues.maxExtraPaddingPx}
-              onChange={(value) => onOptionChange("maxExtraPaddingPx", value)}
+              value={formValues.max_extra_padding_px}
+              onChange={(value) => onOptionChange("max_extra_padding_px", value)}
               step={10}
               min={0}
               max={2000}
