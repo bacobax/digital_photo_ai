@@ -157,7 +157,22 @@ async def process_image(
     print(f"  min_crown_to_chin_mm: {min_crown_to_chin_mm}")
     print(f"  target_crown_to_chin_mm: {target_crown_to_chin_mm}")
     print(f"  max_extra_padding_px: {max_extra_padding_px}")
+
+    # Use normalized resize scaling (the value actually used by the pipeline)
+   
+
+    # Build a descriptive filename suffix with key parameters
+    def _fmt(v: float, ndigits: int) -> str:
+        # fixed decimals, replace dot with 'p' to avoid confusion with file extensions
+        return f"{v:.{ndigits}f}".replace(".", "p")
     image = _read_image_from_upload(file)
+    fname_suffix = (
+        f"tmr-{_fmt(top_margin_ratio, 3)}_"
+        f"bur-{_fmt(bottom_upper_ratio, 3)}_"
+        f"tcc-{_fmt(target_crown_to_chin_mm, 1)}_"
+        f"rs-{_fmt(resize_scaling, 2)}"
+    )
+
     params = RunParameters(
         target_w_over_h=target_w_over_h,
         top_margin_ratio=top_margin_ratio,
@@ -165,7 +180,7 @@ async def process_image(
         target_height_mm=target_height_mm,
         min_height_px=min_height_px,
         min_width_px=min_width_px,
-        resize_scaling=_clamp_resize_scaling(resize_scaling),
+        resize_scaling=resize_scaling,
         max_crown_to_chin_mm=max_crown_to_chin_mm,
         min_crown_to_chin_mm=min_crown_to_chin_mm,
         target_crown_to_chin_mm=target_crown_to_chin_mm,
@@ -197,8 +212,8 @@ async def process_image(
             final_bytes = _encode_jpeg_with_dpi(face.final_image, width_mm, height_mm)
             annotated_bytes = _encode_jpeg_with_dpi(face.annotated_image, width_mm, height_mm)
 
-            zf.writestr(f"{face_id}_stage6_final_balanced.jpg", final_bytes)
-            zf.writestr(f"{face_id}_stage6_final_annotated.jpg", annotated_bytes)
+            zf.writestr(f"{face_id}_{fname_suffix}.jpg", final_bytes)
+            zf.writestr(f"{face_id}_{fname_suffix}.jpg", annotated_bytes)
 
             metadata.append({"face_id": face_id, **face.to_dict()})
 
