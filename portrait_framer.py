@@ -75,6 +75,8 @@ class RunParameters:
     target_crown_to_chin_mm: float = 34.0
     max_extra_padding_px: int = 600
     resize_scaling: float = 0.0
+    square_dpi: bool = True
+    lock_ratio_after_resize: bool = True
 
 
 class FaceFramingPipeline:
@@ -91,9 +93,15 @@ class FaceFramingPipeline:
         # target physical dimensions in mm
         height_mm = float(self.params.target_height_mm)
         width_mm = float(self.params.target_w_over_h * self.params.target_height_mm)
-        # Compute dpi; guard against division by zero
-        dpi_x = (w_px / max(1e-6, width_mm)) * 25.4
-        dpi_y = (h_px / max(1e-6, height_mm)) * 25.4
+        # Compute dpi; guard against division by zero. Optionally force square DPI.
+        if getattr(self.params, "square_dpi", True):
+            # Anchor DPI to the vertical physical size so X and Y use the same density
+            dpi_base = (h_px / max(1e-6, height_mm)) * 25.4
+            dpi_x = dpi_base
+            dpi_y = dpi_base
+        else:
+            dpi_x = (w_px / max(1e-6, width_mm)) * 25.4
+            dpi_y = (h_px / max(1e-6, height_mm)) * 25.4
         # Convert to RGB and save via PIL so DPI is stored in metadata
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(rgb)
@@ -521,6 +529,36 @@ class FaceFramingPipeline:
                     cv2.BORDER_CONSTANT,
                     value=(255, 255, 255),
                 )
+
+            # Optionally enforce exact target aspect ratio after resize/padding
+            if getattr(self.params, "lock_ratio_after_resize", True):
+                desired_w = int(round(final_crop.shape[0] * self.params.target_w_over_h))
+                cur_w = final_crop.shape[1]
+                diff = desired_w - cur_w
+                if diff > 0:
+                    # Pad equally left/right with white to reach desired width
+                    pad_left = diff // 2
+                    pad_right = diff - pad_left
+                    final_crop = cv2.copyMakeBorder(
+                        final_crop,
+                        0,
+                        0,
+                        pad_left,
+                        pad_right,
+                        cv2.BORDER_CONSTANT,
+                        value=(255, 255, 255),
+                    )
+                elif diff < 0:
+                    # If we are slightly wider (<=2 px), trim symmetrically; otherwise keep as-is
+                    excess = -diff
+                    if excess <= 2 and cur_w - excess > 1:
+                        trim_left = excess // 2
+                        trim_right = excess - trim_left
+                        final_crop = final_crop[:, trim_left:cur_w - trim_right]
+                    else:
+                        print(
+                            f"  [Face {idx}] Aspect lock would require trimming {excess}px; leaving width unchanged to avoid content loss."
+                        )
 
             scaled_h = final_crop.shape[0]
             scale_px = scaled_h / max(1, crop_h)

@@ -170,6 +170,7 @@ async def process_image(
         min_crown_to_chin_mm=min_crown_to_chin_mm,
         target_crown_to_chin_mm=target_crown_to_chin_mm,
         max_extra_padding_px=max_extra_padding_px,
+        lock_ratio_after_resize=True
     )
 
     results = framer.process_array(
