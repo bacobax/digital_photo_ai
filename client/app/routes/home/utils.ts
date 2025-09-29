@@ -421,6 +421,8 @@ export async function parseZipArchive(blob: Blob, messages: Messages) {
       return;
     }
 
+    console.log("Processing entry:", relativePath);
+
     const lowerPath = relativePath.toLowerCase();
     const faceMatch = lowerPath.match(faceIdRegex);
     const faceId = faceMatch ? faceMatch[1].toLowerCase() : "face01";
@@ -428,6 +430,8 @@ export async function parseZipArchive(blob: Blob, messages: Messages) {
     if (balancedRegex.test(lowerPath) || annotatedRegex.test(lowerPath)) {
       const isBalanced = balancedRegex.test(lowerPath);
       const isAnnotated = annotatedRegex.test(lowerPath);
+
+      console.log({isBalanced, isAnnotated})
 
       assetPromises.push(
         entry.async("blob").then((assetBlob) => {

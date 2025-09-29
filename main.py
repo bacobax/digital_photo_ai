@@ -70,6 +70,7 @@ def main(args: argparse.Namespace) -> None:
         min_crown_to_chin_mm=args.crown_chin_min_mm,
         target_crown_to_chin_mm=args.crown_chin_target_mm,
         resize_scaling=_clamp_resize_scaling(args.resize_scaling),
+        square_dpi=True
     )
 
     save_debug = not args.no_debug

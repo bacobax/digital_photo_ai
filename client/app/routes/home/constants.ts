@@ -39,6 +39,6 @@ export const SUPPORTED_LANGUAGES: Array<{ code: Language; label: string; nativeN
   { code: "es", label: "ES", nativeName: "Espanol" },
 ];
 
-export const balancedRegex = /final_balanced/i;
-export const annotatedRegex = /final_annotated/i;
+export const balancedRegex = /final/i;
+export const annotatedRegex = /annotated/i;
 export const faceIdRegex = /(face\d+)/i;

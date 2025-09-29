@@ -304,7 +304,7 @@ export default function Home() {
         method: "POST",
         body: formData,
       });
-
+      console.log({ response });
       if (!response.ok) {
         const rawErrorText = await response.text().catch(() => "");
         clearPhaseTimer();
@@ -326,7 +326,7 @@ export default function Home() {
             message = messages.errorNetwork;
           }
         }
-
+        console.log({ rawErrorText, serverDetail });
         if (rawErrorText) {
           console.error("Processing request returned", response.status, rawErrorText);
         }
@@ -336,11 +336,12 @@ export default function Home() {
         setToast({ type: "error", message: messages.toastError });
         return;
       }
-
+      console.log("Processing request succeeded", response.status);
       const blob = await response.blob();
       setZipBlob(blob);
 
       const faces = await parseZipArchive(blob, messages);
+      console.log("Parsed faces", faces);
       setFaceResults(faces);
       setSelectedFaceIndex(0);
       clearPhaseTimer();

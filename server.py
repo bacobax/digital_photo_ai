@@ -212,8 +212,8 @@ async def process_image(
             final_bytes = _encode_jpeg_with_dpi(face.final_image, width_mm, height_mm)
             annotated_bytes = _encode_jpeg_with_dpi(face.annotated_image, width_mm, height_mm)
 
-            zf.writestr(f"{face_id}_{fname_suffix}.jpg", final_bytes)
-            zf.writestr(f"{face_id}_{fname_suffix}.jpg", annotated_bytes)
+            zf.writestr(f"final_{fname_suffix}.jpg", final_bytes)
+            zf.writestr(f"annotated_{face_id}_{fname_suffix}.jpg", annotated_bytes)
 
             metadata.append({"face_id": face_id, **face.to_dict()})
 
