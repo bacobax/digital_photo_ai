@@ -76,8 +76,11 @@ def shoulder_y_debug(
     shoulder_y = float(y_start + best_idx)
 
     # Prepare debug overlays
-    scores_norm = cv2.normalize(scores, None, 0, 255, cv2.NORM_MINMAX)
-    scores_vis = np.tile(scores_norm[:, None], (1, 200)).astype(np.uint8)
+    scores_norm = cv2.normalize(scores, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    scores_vis = np.tile(scores_norm[:, None], (1, 200))
+    # Ensure the array is 2D single-channel for cv2.applyColorMap
+    scores_vis = scores_vis.squeeze().astype(np.uint8)
+
     scores_vis = cv2.applyColorMap(scores_vis, cv2.COLORMAP_VIRIDIS)
     debug["shoulder_scores"] = scores_vis
 
@@ -217,6 +220,7 @@ class FaceFramingPipeline:
             self._extend_bottom_margin()
             self._crop_and_map()
             self._adjust_crops_with_trim_padding()
+
         self._resize_crops_and_map_mm()
         self._balance_lighting()
         return self.items
