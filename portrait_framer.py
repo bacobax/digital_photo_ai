@@ -80,6 +80,7 @@ def shoulder_y_debug(
     scores_vis = np.tile(scores_norm[:, None], (1, 200))
     # Ensure the array is 2D single-channel for cv2.applyColorMap
     scores_vis = scores_vis.squeeze().astype(np.uint8)
+
     scores_vis = cv2.applyColorMap(scores_vis, cv2.COLORMAP_VIRIDIS)
     debug["shoulder_scores"] = scores_vis
 

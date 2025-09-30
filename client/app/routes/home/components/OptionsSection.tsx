@@ -9,6 +9,7 @@ export function OptionsSection({
   messages,
   formValues,
   onOptionChange,
+  onPipelineChange,
   onToggleDebug,
   status,
   canSubmit,
@@ -17,6 +18,7 @@ export function OptionsSection({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const disabled = status === "processing";
+  const isClosedForm = formValues.pipeline === "closed_form";
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition dark:border-slate-800 dark:bg-slate-900">
@@ -73,6 +75,28 @@ export function OptionsSection({
         </label>
       </div>
 
+      <fieldset className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+        <legend className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          {messages.pipelineHeading}
+        </legend>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <PipelineOptionCard
+            label={messages.pipelineClosedFormLabel}
+            description={messages.pipelineClosedFormDescription}
+            selected={isClosedForm}
+            onSelect={() => onPipelineChange("closed_form")}
+            disabled={disabled}
+          />
+          <PipelineOptionCard
+            label={messages.pipelineLegacyLabel}
+            description={messages.pipelineLegacyDescription}
+            selected={!isClosedForm}
+            onSelect={() => onPipelineChange("legacy")}
+            disabled={disabled}
+          />
+        </div>
+      </fieldset>
+
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
         <button
           type="button"
@@ -98,14 +122,6 @@ export function OptionsSection({
               disabled={disabled}
             />
             <PercentageSlider
-              label={messages.topMarginLabel}
-              value={formValues.top_margin_ratio}
-              onChange={(value) => onOptionChange("top_margin_ratio", value)}
-              minPercent={0}
-              maxPercent={50}
-              disabled={disabled}
-            />
-            <PercentageSlider
               label={messages.resizeScalingLabel}
               value={formValues.resize_scaling}
               onChange={(value) => onOptionChange("resize_scaling", value)}
@@ -113,21 +129,63 @@ export function OptionsSection({
               maxPercent={100}
               disabled={disabled}
             />
-            <PercentageSlider
-              label={messages.bottomUpperLabel}
-              value={formValues.bottom_upper_ratio}
-              onChange={(value) => onOptionChange("bottom_upper_ratio", value)}
-              minPercent={50}
-              maxPercent={100}
-              disabled={disabled}
-            />
-            <div className="sm:col-span-2">
-              <CropPreview
-                widthHeightRatio={formValues.target_w_over_h}
-                topMarginRatio={formValues.top_margin_ratio}
-                lowerFaceRatio={formValues.bottom_upper_ratio}
-              />
-            </div>
+            {isClosedForm ? (
+              <>
+                <NumberInput
+                  label={messages.minTopMmLabel}
+                  suffix={messages.measurementUnitMm}
+                  value={formValues.min_top_mm}
+                  onChange={(value) => onOptionChange("min_top_mm", value)}
+                  step={0.5}
+                  min={0}
+                  disabled={disabled}
+                />
+                <NumberInput
+                  label={messages.minBottomMmLabel}
+                  suffix={messages.measurementUnitMm}
+                  value={formValues.min_bottom_mm}
+                  onChange={(value) => onOptionChange("min_bottom_mm", value)}
+                  step={0.5}
+                  min={0}
+                  disabled={disabled}
+                />
+                <NumberInput
+                  label={messages.shoulderClearanceLabel}
+                  suffix={messages.measurementUnitMm}
+                  value={formValues.shoulder_clearance_mm}
+                  onChange={(value) => onOptionChange("shoulder_clearance_mm", value)}
+                  step={0.5}
+                  min={0}
+                  disabled={disabled}
+                />
+              </>
+            ) : (
+              <>
+                <PercentageSlider
+                  label={messages.topMarginLabel}
+                  value={formValues.top_margin_ratio}
+                  onChange={(value) => onOptionChange("top_margin_ratio", value)}
+                  minPercent={0}
+                  maxPercent={50}
+                  disabled={disabled}
+                />
+                <PercentageSlider
+                  label={messages.bottomUpperLabel}
+                  value={formValues.bottom_upper_ratio}
+                  onChange={(value) => onOptionChange("bottom_upper_ratio", value)}
+                  minPercent={50}
+                  maxPercent={100}
+                  disabled={disabled}
+                />
+                <div className="sm:col-span-2">
+                  <CropPreview
+                    widthHeightRatio={formValues.target_w_over_h}
+                    topMarginRatio={formValues.top_margin_ratio}
+                    lowerFaceRatio={formValues.bottom_upper_ratio}
+                  />
+                </div>
+              </>
+            )}
             <NumberInput
               label={messages.maxCrownToChinLabel}
               suffix={messages.measurementUnitMm}
@@ -355,6 +413,33 @@ function PercentageSlider({ label, value, onChange, minPercent, maxPercent, disa
         className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:bg-slate-700"
       />
     </label>
+  );
+}
+
+type PipelineOptionCardProps = {
+  label: string;
+  description: string;
+  selected: boolean;
+  onSelect: () => void;
+  disabled: boolean;
+};
+
+function PipelineOptionCard({ label, description, selected, onSelect, disabled }: PipelineOptionCardProps) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={classNames(
+        "flex h-full flex-col gap-1 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-sky-500 dark:focus:ring-sky-800",
+        selected && "border-sky-500 ring-2 ring-sky-200 dark:border-sky-400 dark:ring-sky-900",
+        disabled && "cursor-not-allowed opacity-60 hover:border-slate-200 dark:hover:border-slate-700",
+      )}
+    >
+      <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span>
+      <span className="text-xs text-slate-500 dark:text-slate-400">{description}</span>
+    </button>
   );
 }
 

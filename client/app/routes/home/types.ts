@@ -21,6 +21,8 @@ export type MeasurementLabelKey =
 
 export type Language = "en" | "it" | "es";
 
+export type PipelineMode = "closed_form" | "legacy";
+
 export type NormalizedMeasurement = {
   label: string;
   value: string;
@@ -83,6 +85,11 @@ export type Messages = {
   privacyNote: string;
   defaultsHint: string;
   optionsHeading: string;
+  pipelineHeading: string;
+  pipelineClosedFormLabel: string;
+  pipelineClosedFormDescription: string;
+  pipelineLegacyLabel: string;
+  pipelineLegacyDescription: string;
   targetHeightLabel: string;
   targetHeightSuffix: string;
   minHeightLabel: string;
@@ -166,6 +173,9 @@ export type Messages = {
   minCrownToChinLabel: string;
   targetCrownToChinLabel: string;
   maxExtraPaddingLabel: string;
+  minTopMmLabel: string;
+  minBottomMmLabel: string;
+  shoulderClearanceLabel: string;
   ratioSuffix: string;
   overlayHeading: string;
   overlayLegendHeading: string;
@@ -173,6 +183,7 @@ export type Messages = {
 };
 
 export type FormValuesState = {
+  pipeline: PipelineMode;
   save_debug: boolean;
   target_w_over_h: number;
   top_margin_ratio: number;
@@ -185,7 +196,12 @@ export type FormValuesState = {
   target_crown_to_chin_mm: number;
   max_extra_padding_px: number;
   resize_scaling: number;
+  min_top_mm: number;
+  min_bottom_mm: number;
+  shoulder_clearance_mm: number;
 };
+
+export type NumericFormField = Exclude<keyof FormValuesState, "pipeline" | "save_debug">;
 
 export type BadgeStyles = Record<BadgeTone, string>;
 
@@ -211,7 +227,8 @@ export type UploadSectionProps = {
 export type OptionsSectionProps = {
   messages: Messages;
   formValues: FormValuesState;
-  onOptionChange: (field: keyof FormValuesState, value: number) => void;
+  onOptionChange: (field: NumericFormField, value: number) => void;
+  onPipelineChange: (mode: PipelineMode) => void;
   onToggleDebug: () => void;
   status: Status;
   canSubmit: boolean;
