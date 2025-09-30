@@ -26,6 +26,82 @@ from functions import (
     top_of_hair_y_debug,
 )
 
+
+def shoulder_y_debug(
+    img: np.ndarray, box: Box, W: int, H: int
+) -> Tuple[Optional[float], Dict[str, np.ndarray]]:
+    """Estimate the shoulder line using simple gradient cues.
+
+    The heuristic searches a band below the chin for the strongest
+    horizontal gradient which often corresponds to the shoulder line. The
+    search region widens the input box to capture the shoulder width.
+    """
+
+    debug: Dict[str, np.ndarray] = {}
+    if img is None or img.size == 0:
+        return None, debug
+
+    x1, y1, x2, y2 = [float(v) for v in box]
+    chin_y = float(y2)
+    if H <= 0 or W <= 0:
+        return None, debug
+
+    chin_i = int(np.clip(round(chin_y), 0, max(0, H - 1)))
+    band_height = int(max(20, round((y2 - y1) * 0.45)))
+    y_start = chin_i
+    y_end = int(np.clip(y_start + band_height, y_start + 1, H))
+    if y_end - y_start < 2:
+        return None, debug
+
+    width = float(x2 - x1)
+    expand = int(max(0, round(width * 0.6)))
+    roi_x1 = int(np.clip(math.floor(x1) - expand, 0, max(0, W - 1)))
+    roi_x2 = int(np.clip(math.ceil(x2) + expand, roi_x1 + 1, W))
+
+    roi = img[y_start:y_end, roi_x1:roi_x2]
+    if roi.size == 0:
+        return None, debug
+
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Compute vertical gradients to highlight horizontal edges
+    sobel_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    sobel_abs = np.abs(sobel_y)
+    scores = sobel_abs.mean(axis=1)
+
+    if scores.size == 0:
+        return None, debug
+
+    best_idx = int(np.argmax(scores))
+    shoulder_y = float(y_start + best_idx)
+
+    # Prepare debug overlays
+    scores_norm = cv2.normalize(scores, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    scores_vis = np.tile(scores_norm[:, None], (1, 200))
+    # Ensure the array is 2D single-channel for cv2.applyColorMap
+    scores_vis = scores_vis.squeeze().astype(np.uint8)
+    scores_vis = cv2.applyColorMap(scores_vis, cv2.COLORMAP_VIRIDIS)
+    debug["shoulder_scores"] = scores_vis
+
+    overlay = img.copy()
+    cv2.rectangle(
+        overlay,
+        (roi_x1, y_start),
+        (roi_x2 - 1, y_end - 1),
+        (255, 255, 0),
+        2,
+    )
+    cv2.line(
+        overlay,
+        (0, int(np.clip(round(shoulder_y), 0, H - 1))),
+        (W - 1, int(np.clip(round(shoulder_y), 0, H - 1))),
+        (0, 255, 255),
+        2,
+    )
+    debug["shoulder_overlay"] = overlay
+
+    return shoulder_y, debug
+
 Box = Tuple[float, float, float, float]
 
 
@@ -40,10 +116,12 @@ class FacePipelineItem:
     original_bottom_y_abs: Optional[float] = None
     hair_top_y_abs: Optional[float] = None
     crown_y_abs: Optional[float] = None
+    shoulder_y_abs: Optional[float] = None
     chin_y_local: Optional[float] = None
     top_face_y_local: Optional[float] = None
     hair_top_y_local: Optional[float] = None
     crown_y_local: Optional[float] = None
+    shoulder_y_local: Optional[float] = None
     original_bottom_y_local: Optional[float] = None
     final_crop: Optional[np.ndarray] = None
     debug: Dict[str, np.ndarray] = field(default_factory=dict)
@@ -61,6 +139,12 @@ class FacePipelineItem:
     alpha: Optional[float] = None
     chin_crown_T_low: Optional[float] = None
     chin_crown_T_high: Optional[float] = None
+    mm_top_margin_mm: Optional[float] = None
+    mm_bottom_margin_mm: Optional[float] = None
+    mm_crown_to_chin_mm: Optional[float] = None
+    mm_budget_limited_top: bool = False
+    mm_budget_limited_bottom: bool = False
+    mm_budget_limited_bounds: bool = False
 
 @dataclass
 class RunParameters:
@@ -77,6 +161,10 @@ class RunParameters:
     resize_scaling: float = 0.0
     square_dpi: bool = True
     lock_ratio_after_resize: bool = True
+    min_top_mm: float = 4.0
+    min_bottom_mm: float = 8.0
+    shoulder_clearance_mm: float = 3.0
+    use_closed_form: bool = True
 
 
 class FaceFramingPipeline:
@@ -124,10 +212,14 @@ class FaceFramingPipeline:
         self._detect_faces()
         if not self.items:
             return []
-        self._detect_hair_and_top_margin()
-        self._extend_bottom_margin()
-        self._crop_and_map()
-        self._adjust_crops_with_trim_padding()
+        if getattr(self.params, "use_closed_form", False):
+            self._solve_mm_budget()
+        else:
+            self._detect_hair_and_top_margin()
+            self._extend_bottom_margin()
+            self._crop_and_map()
+            self._adjust_crops_with_trim_padding()
+
         self._resize_crops_and_map_mm()
         self._balance_lighting()
         return self.items
@@ -177,6 +269,271 @@ class FaceFramingPipeline:
 
         if self.save_debug:
             self._save_stage1_debug()
+
+    def _solve_mm_budget(self) -> None:
+        print("[Closed-Form] Solving mm-budget for detected faces…")
+        H, W = self.img.shape[:2]
+        min_top_mm = max(0.0, float(getattr(self.params, "min_top_mm", 4.0)))
+        min_bottom_mm = max(0.0, float(getattr(self.params, "min_bottom_mm", 8.0)))
+        delta_mm = max(0.0, float(getattr(self.params, "shoulder_clearance_mm", 3.0)))
+        target_height_mm = float(getattr(self.params, "target_height_mm", 45.0))
+        c_min = float(getattr(self.params, "min_crown_to_chin_mm", 31.0))
+        c_max = float(getattr(self.params, "max_crown_to_chin_mm", 36.0))
+        c_target = float(getattr(self.params, "target_crown_to_chin_mm", 34.0))
+        ratio = float(self.params.target_w_over_h)
+
+        for idx, item in enumerate(self.items, start=1):
+            box = item.original_box
+            if box is None:
+                print(f"  [Face {idx}] Missing detection box; skipping mm-budget.")
+                continue
+
+            hair_top, hair_debug = top_of_hair_y_debug(self.img, box, W, H)
+            if hair_debug:
+                item.debug.update(hair_debug)
+            item.hair_top_y_abs = hair_top
+
+            shoulder_y, shoulder_debug = shoulder_y_debug(self.img, box, W, H)
+            if shoulder_debug:
+                item.debug.update(shoulder_debug)
+            item.shoulder_y_abs = shoulder_y
+
+            crown_y = None
+            if hair_top is not None and item.top_face_y_abs is not None:
+                crown_y = float(min(hair_top, item.top_face_y_abs))
+            elif hair_top is not None:
+                crown_y = float(hair_top)
+            else:
+                crown_y = item.top_face_y_abs
+
+            item.crown_y_abs = crown_y
+
+            chin_y = item.chin_y_abs
+            if crown_y is None or chin_y is None:
+                print(f"  [Face {idx}] Missing crown/chin landmarks; using original crop.")
+                self._fallback_to_original_crop(idx, item, box)
+                continue
+
+            d_px = float(chin_y - crown_y)
+            if d_px <= 1e-3:
+                print(f"  [Face {idx}] Crown/chin span too small ({d_px:.2f}px); using original crop.")
+                self._fallback_to_original_crop(idx, item, box)
+                continue
+
+            shoulder_ratio = None
+            shoulder_px = None
+            if shoulder_y is not None and math.isfinite(shoulder_y):
+                shoulder_px = float(shoulder_y - chin_y)
+                if shoulder_px > 0:
+                    shoulder_ratio = shoulder_px / d_px
+
+            c_mm = float(np.clip(c_target, c_min, c_max))
+
+            def compute_margins(c_val: float) -> Tuple[float, float, float]:
+                shoulder_req = float("-inf")
+                if shoulder_ratio is not None:
+                    shoulder_req = shoulder_ratio * c_val + delta_mm
+                if math.isfinite(shoulder_req):
+                    b_val = max(min_bottom_mm, shoulder_req)
+                else:
+                    b_val = min_bottom_mm
+                t_val = target_height_mm - c_val - b_val
+                return t_val, b_val, shoulder_req
+
+            limited_top = False
+            limited_bottom = False
+            limited_bounds = False
+
+            for _ in range(8):
+                t_mm, b_mm, shoulder_req = compute_margins(c_mm)
+                if t_mm >= min_top_mm - 1e-3:
+                    break
+                if math.isfinite(shoulder_req) and shoulder_req >= min_bottom_mm - 1e-3 and shoulder_ratio is not None:
+                    denom = 1.0 + shoulder_ratio
+                    numer = target_height_mm - delta_mm - min_top_mm
+                    if denom > 1e-6:
+                        c_candidate = numer / denom
+                    else:
+                        c_candidate = c_min
+                else:
+                    c_candidate = target_height_mm - min_top_mm - min_bottom_mm
+                c_candidate = float(np.clip(c_candidate, c_min, c_max))
+                if c_candidate >= c_mm - 1e-3:
+                    break
+                c_mm = c_candidate
+
+            t_mm, b_mm, shoulder_req = compute_margins(c_mm)
+            if t_mm < min_top_mm - 1e-3:
+                limited_top = True
+                t_mm = max(0.0, t_mm)
+
+            mm_per_px_face = c_mm / d_px
+            top_px_target = (t_mm / c_mm) * d_px if c_mm > 1e-6 else 0.0
+            bottom_px_target = (b_mm / c_mm) * d_px if c_mm > 1e-6 else 0.0
+
+            top_available = float(np.clip(crown_y, 0.0, H))
+            bottom_available = float(np.clip(H - chin_y, 0.0, H))
+
+            top_px = min(top_px_target, top_available)
+            if top_px < top_px_target - 1e-3:
+                limited_top = True
+
+            bottom_px = min(bottom_px_target, bottom_available)
+            if bottom_px < bottom_px_target - 1e-3:
+                limited_bottom = True
+
+            if shoulder_ratio is not None and shoulder_px is not None:
+                clearance_px = delta_mm / mm_per_px_face if mm_per_px_face > 0 else 0.0
+                shoulder_needed = max(0.0, shoulder_px + clearance_px)
+                if bottom_available >= shoulder_needed and bottom_px < shoulder_needed - 1e-3:
+                    bottom_px = shoulder_needed
+                if bottom_px < shoulder_needed - 1e-3:
+                    limited_bottom = True
+                    bottom_px = min(bottom_px, bottom_available)
+
+            top_px = max(0.0, top_px)
+            bottom_px = max(0.0, bottom_px)
+
+            y1 = float(crown_y - top_px)
+            y2 = float(chin_y + bottom_px)
+
+            if y1 < 0.0:
+                y1 = 0.0
+                top_px = crown_y
+                limited_top = True
+            if y2 > H:
+                y2 = float(H)
+                bottom_px = max(0.0, y2 - chin_y)
+                limited_bottom = True
+
+            h_crop = max(1.0, y2 - y1)
+            w_crop = h_crop * ratio
+
+            cx = (box[0] + box[2]) / 2.0
+            x1 = cx - w_crop / 2.0
+            x2 = cx + w_crop / 2.0
+
+            if w_crop > W:
+                limited_bounds = True
+                x1 = 0.0
+                x2 = float(W)
+                w_crop = x2 - x1
+
+            if x1 < 0.0:
+                shift = -x1
+                x1 += shift
+                x2 += shift
+                limited_bounds = True
+            if x2 > W:
+                shift = x2 - W
+                x1 -= shift
+                x2 -= shift
+                limited_bounds = True
+
+            x1 = float(np.clip(x1, 0.0, W))
+            x2 = float(np.clip(x2, x1 + 1e-3, W))
+
+            xi1 = max(0, min(W - 1, int(math.floor(x1))))
+            yi1 = max(0, min(H - 1, int(math.floor(y1))))
+            xi2 = max(xi1 + 1, min(W, int(math.ceil(x2))))
+            yi2 = max(yi1 + 1, min(H, int(math.ceil(y2))))
+
+            crop = self.img[yi1:yi2, xi1:xi2]
+            if crop.size == 0:
+                print(f"  [Face {idx}] Crop empty after mm-budget clamping; using original crop.")
+                self._fallback_to_original_crop(idx, item, box)
+                continue
+
+            item.final_box = (float(x1), float(y1), float(x2), float(y2))
+            item.bottom_scaled_box = item.final_box
+            item.top_margin_box = item.final_box
+
+            def local_offset(value: Optional[float]) -> Optional[float]:
+                if value is None:
+                    return None
+                return float(value - yi1)
+
+            item.pre_scale_crop = crop.copy()
+            item.final_crop = None
+            item.chin_y_local = local_offset(chin_y)
+            item.crown_y_local = local_offset(crown_y)
+            item.hair_top_y_local = local_offset(item.hair_top_y_abs)
+            item.top_face_y_local = local_offset(item.top_face_y_abs)
+            item.shoulder_y_local = local_offset(item.shoulder_y_abs)
+            item.original_bottom_y_local = local_offset(y2)
+            item.original_bottom_y_abs = float(y2)
+
+            item.pad_limited = limited_bottom
+            item.trim_limited = limited_top or limited_bounds
+            item.mm_budget_limited_top = limited_top
+            item.mm_budget_limited_bottom = limited_bottom
+            item.mm_budget_limited_bounds = limited_bounds
+
+            actual_top_mm = max(0.0, top_px * mm_per_px_face)
+            actual_bottom_mm = max(0.0, bottom_px * mm_per_px_face)
+            item.mm_top_margin_mm = actual_top_mm
+            item.mm_bottom_margin_mm = actual_bottom_mm
+            item.mm_crown_to_chin_mm = c_mm
+            item.min_height_req_px = None
+            item.max_height_req_px = None
+
+            notes = []
+            if limited_top:
+                notes.append("top limited")
+            if limited_bottom:
+                notes.append("bottom limited")
+            if limited_bounds:
+                notes.append("bounds limited")
+            note_str = f" ({', '.join(notes)})" if notes else ""
+
+            print(
+                f"  [Face {idx}] mm-budget -> top {actual_top_mm:.2f} mm | "
+                f"face {c_mm:.2f} mm | bottom {actual_bottom_mm:.2f} mm{note_str}"
+            )
+
+        if self.save_debug:
+            self._save_mm_budget_debug()
+
+    def _fallback_to_original_crop(self, idx: int, item: FacePipelineItem, box: Box) -> None:
+        H, W = self.img.shape[:2]
+        x1, y1, x2, y2 = box
+        xi1 = max(0, min(W - 1, int(math.floor(x1))))
+        yi1 = max(0, min(H - 1, int(math.floor(y1))))
+        xi2 = max(xi1 + 1, min(W, int(math.ceil(x2))))
+        yi2 = max(yi1 + 1, min(H, int(math.ceil(y2))))
+        crop = self.img[yi1:yi2, xi1:xi2]
+        if crop.size == 0:
+            print(f"  [Face {idx}] Original crop empty; skipping.")
+            return
+
+        item.final_box = (float(x1), float(y1), float(x2), float(y2))
+        item.bottom_scaled_box = item.final_box
+        item.top_margin_box = item.final_box
+        item.pre_scale_crop = crop.copy()
+        item.final_crop = None
+
+        def local_offset(value: Optional[float]) -> Optional[float]:
+            if value is None:
+                return None
+            return float(value - yi1)
+
+        item.chin_y_local = local_offset(item.chin_y_abs)
+        item.crown_y_local = local_offset(item.crown_y_abs)
+        item.hair_top_y_local = local_offset(item.hair_top_y_abs)
+        item.top_face_y_local = local_offset(item.top_face_y_abs)
+        item.shoulder_y_local = local_offset(item.shoulder_y_abs)
+        item.original_bottom_y_local = local_offset(y2)
+        item.original_bottom_y_abs = float(y2)
+        item.mm_top_margin_mm = None
+        item.mm_bottom_margin_mm = None
+        item.mm_crown_to_chin_mm = None
+        item.mm_budget_limited_top = False
+        item.mm_budget_limited_bottom = False
+        item.mm_budget_limited_bounds = False
+        item.pad_limited = False
+        item.trim_limited = False
+        item.min_height_req_px = None
+        item.max_height_req_px = None
 
     # Stage 2 -----------------------------------------------------------------
     def _detect_hair_and_top_margin(self) -> None:
@@ -918,6 +1275,7 @@ class FaceFramingPipeline:
             ("Crown", item.crown_y_local, (0, 0, 255)),
             ("Forehead", item.top_face_y_local, (0, 165, 255)),
             ("Chin", item.chin_y_local, (0, 255, 0)),
+            ("Shoulder", item.shoulder_y_local, (0, 255, 255)),
         ]
 
         for name, offset, color in markers:
@@ -1017,6 +1375,65 @@ class FaceFramingPipeline:
         cv2.imwrite(path, self._create_detection_visual())
         print(f"[Stage 1] Debug saved -> {path}")
 
+    def _save_mm_budget_debug(self) -> None:
+        stage_dir = os.path.join(self.logdir, "stage_cf_mm_budget")
+        os.makedirs(stage_dir, exist_ok=True)
+
+        overlay_path = os.path.join(stage_dir, "closed_form_overlay.jpg")
+        cv2.imwrite(overlay_path, self._create_mm_budget_visual())
+
+        for idx, item in enumerate(self.items, start=1):
+            crop = item.pre_scale_crop
+            if crop is None or crop.size == 0:
+                continue
+
+            crop_vis = crop.copy()
+            h, w = crop_vis.shape[:2]
+
+            def draw_marker(y: Optional[float], color: Tuple[int, int, int], label: str) -> None:
+                if y is None:
+                    return
+                pos = int(np.clip(round(y), 0, h - 1))
+                cv2.line(crop_vis, (0, pos), (w - 1, pos), color, 2)
+                cv2.putText(
+                    crop_vis,
+                    label,
+                    (10, max(20, pos + 18)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    color,
+                    2,
+                    cv2.LINE_AA,
+                )
+
+            draw_marker(item.crown_y_local, (0, 0, 255), "crown")
+            draw_marker(item.chin_y_local, (0, 165, 255), "chin")
+            draw_marker(item.shoulder_y_local, (0, 255, 255), "shoulder")
+
+            info_lines: List[str] = []
+            if item.mm_top_margin_mm is not None:
+                info_lines.append(f"top={item.mm_top_margin_mm:.1f}mm")
+            if item.mm_crown_to_chin_mm is not None:
+                info_lines.append(f"face={item.mm_crown_to_chin_mm:.1f}mm")
+            if item.mm_bottom_margin_mm is not None:
+                info_lines.append(f"bottom={item.mm_bottom_margin_mm:.1f}mm")
+            if info_lines:
+                cv2.putText(
+                    crop_vis,
+                    " | ".join(info_lines),
+                    (10, min(h - 10, 30)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+
+            crop_path = os.path.join(stage_dir, f"face{idx:02d}_pre_scale_debug.jpg")
+            cv2.imwrite(crop_path, crop_vis)
+
+        print(f"[Closed-Form] Debug saved -> {overlay_path} and per-face crops in {stage_dir}")
+
     def _save_stage2_debug(self) -> None:
         stage_dir = os.path.join(self.logdir, "stage2_hair")
         steps_dir = os.path.join(stage_dir, "steps")
@@ -1076,6 +1493,33 @@ class FaceFramingPipeline:
                 (0, 255, 0),
                 3,
             )
+        return vis
+
+    def _create_mm_budget_visual(self) -> np.ndarray:
+        vis = self.img.copy()
+        H = vis.shape[0]
+        for item in self.items:
+            if item.final_box is None:
+                continue
+            x1, y1, x2, y2 = item.final_box
+            cv2.rectangle(
+                vis,
+                (int(round(x1)), int(round(y1))),
+                (int(round(x2)), int(round(y2))),
+                (255, 0, 0),
+                3,
+            )
+
+            def draw_line(y: Optional[float], color: Tuple[int, int, int]) -> None:
+                if y is None:
+                    return
+                pos = int(np.clip(round(y), 0, max(0, H - 1)))
+                cv2.line(vis, (0, pos), (vis.shape[1] - 1, pos), color, 2)
+
+            draw_line(item.crown_y_abs, (0, 0, 255))
+            draw_line(item.chin_y_abs, (0, 165, 255))
+            draw_line(item.shoulder_y_abs, (0, 255, 255))
+
         return vis
 
     def _create_hair_visual(self) -> np.ndarray:
