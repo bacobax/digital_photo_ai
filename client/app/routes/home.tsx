@@ -26,6 +26,7 @@ import { MESSAGES } from "./home/messages";
 import type {
   FaceResult,
   FormValuesState,
+  NumericFormField,
   Language,
   Status,
   Toast,
@@ -64,6 +65,7 @@ export default function Home() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [formValues, setFormValues] = useState<FormValuesState>({
+    pipeline: "closed_form",
     target_height_mm: 45,
     min_height_px: 540,
     min_width_px: 420,
@@ -76,6 +78,9 @@ export default function Home() {
     target_crown_to_chin_mm: 34,
     max_extra_padding_px: 600,
     resize_scaling: 0,
+    min_top_mm: 4,
+    min_bottom_mm: 8,
+    shoulder_clearance_mm: 3,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,10 +261,23 @@ export default function Home() {
   };
 
   const handleOptionChange = useCallback(
-    (field: keyof FormValuesState, value: number) => {
+    (field: NumericFormField, value: number) => {
+      setFormValues((previous) => {
+        const nextValue = Number.isFinite(value) ? value : previous[field];
+        return {
+          ...previous,
+          [field]: nextValue,
+        };
+      });
+    },
+    [],
+  );
+
+  const handlePipelineChange = useCallback(
+    (mode: FormValuesState["pipeline"]) => {
       setFormValues((previous) => ({
         ...previous,
-        [field]: Number.isFinite(value) ? value : previous[field],
+        pipeline: mode,
       }));
     },
     [],
@@ -487,6 +505,7 @@ export default function Home() {
               messages={messages}
               formValues={formValues}
               onOptionChange={handleOptionChange}
+              onPipelineChange={handlePipelineChange}
               onToggleDebug={handleToggleDebug}
               status={status}
               canSubmit={canSubmit}

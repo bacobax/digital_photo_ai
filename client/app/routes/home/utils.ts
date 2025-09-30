@@ -29,7 +29,29 @@ export function resolveApiEndpoint() {
 
   const fromEnv = (import.meta.env as Record<string, string | undefined>)?.VITE_API_URL;
   if (fromEnv && fromEnv.length > 0) {
-    return fromEnv.endsWith("/process") ? fromEnv : `${fromEnv.replace(/\/+$/, "")}/process`;
+    const trimmed = fromEnv.trim();
+    if (trimmed.endsWith("/process")) {
+      return trimmed;
+    }
+
+    const base = trimmed.replace(/\/+$/, "");
+    if (/^https?:\/\//i.test(base)) {
+      try {
+        const url = new URL(base);
+        url.pathname = DEFAULT_API_PATH;
+        url.search = "";
+        url.hash = "";
+        return url.toString();
+      } catch {
+        return `${base}${DEFAULT_API_PATH}`;
+      }
+    }
+
+    if (base.startsWith("/")) {
+      return `${base}${DEFAULT_API_PATH}`;
+    }
+
+    return `/${base}${DEFAULT_API_PATH}`;
   }
 
   if (window.location.protocol === "file:") {
@@ -500,6 +522,8 @@ export function validateIncomingFile(file: File | null) {
 }
 
 export function appendFormData(formData: FormData, formValues: FormValuesState) {
+  formData.append("pipeline", formValues.pipeline);
+  formData.append("use_closed_form", formValues.pipeline === "closed_form" ? "true" : "false");
   formData.append("target_height_mm", String(formValues.target_height_mm));
   formData.append("min_height_px", String(formValues.min_height_px));
   formData.append("min_width_px", String(formValues.min_width_px));
@@ -511,6 +535,9 @@ export function appendFormData(formData: FormData, formValues: FormValuesState) 
   formData.append("target_crown_to_chin_mm", String(formValues.target_crown_to_chin_mm));
   formData.append("max_extra_padding_px", String(formValues.max_extra_padding_px));
   formData.append("resize_scaling", String(formValues.resize_scaling));
+  formData.append("min_top_mm", String(formValues.min_top_mm));
+  formData.append("min_bottom_mm", String(formValues.min_bottom_mm));
+  formData.append("shoulder_clearance_mm", String(formValues.shoulder_clearance_mm));
 }
 
 export function revokeFaceObjectUrls(faces: FaceResult[]) {

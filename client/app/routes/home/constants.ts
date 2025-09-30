@@ -1,7 +1,7 @@
 import type { BadgeStyles, Language, PhaseOrder } from "./types";
 
-export const DEFAULT_API_PATH = "/process";
-export const LOCAL_API_ENDPOINT = "http://127.0.0.1:8000/process";
+export const DEFAULT_API_PATH = "/api/v2/process";
+export const LOCAL_API_ENDPOINT = "http://127.0.0.1:8000/api/v2/process";
 export const MAX_FILE_SIZE = 12 * 1024 * 1024;
 export const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
