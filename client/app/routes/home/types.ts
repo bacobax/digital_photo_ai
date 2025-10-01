@@ -180,6 +180,18 @@ export type Messages = {
   overlayHeading: string;
   overlayLegendHeading: string;
   resizeScalingLabel: string;
+  legacyPreviewHeading: string;
+  legacyPreviewDescription: string;
+  legacyPreviewAspectLabel: string;
+  legacyPreviewTopLabel: string;
+  legacyPreviewBottomLabel: string;
+  closedFormPreviewHeading: string;
+  closedFormPreviewDescription: string;
+  closedFormPreviewTopLabel: string;
+  closedFormPreviewFaceLabel: string;
+  closedFormPreviewBottomLabel: string;
+  closedFormPreviewTotalLabel: string;
+  closedFormPreviewShoulderHint: string;
 };
 
 export type FormValuesState = {

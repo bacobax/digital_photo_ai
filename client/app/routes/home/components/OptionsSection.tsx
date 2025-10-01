@@ -1,9 +1,10 @@
 import type { ChangeEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import classNames from "classnames";
 
 import type { OptionsSectionProps } from "../types";
 import { CropPreview } from "./CropPreview";
+import { MmBudgetPreview } from "./MmBudgetPreview";
 
 export function OptionsSection({
   messages,
@@ -15,8 +16,6 @@ export function OptionsSection({
   canSubmit,
   onRetry,
 }: OptionsSectionProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
   const disabled = status === "processing";
   const isClosedForm = formValues.pipeline === "closed_form";
 
@@ -39,6 +38,14 @@ export function OptionsSection({
           step={0.1}
           disabled={disabled}
         />
+        <RatioInput
+          label={messages.targetRatioLabel}
+          value={formValues.target_w_over_h}
+          onChange={(value) => onOptionChange("target_w_over_h", value)}
+          min={0.5}
+          max={1.5}
+          disabled={disabled}
+        />
         <NumberInput
           label={messages.minHeightLabel}
           suffix={messages.pixelsSuffix}
@@ -57,7 +64,57 @@ export function OptionsSection({
           step={2}
           disabled={disabled}
         />
-        <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 shadow-inner dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+        <div className="sm:col-span-2">
+          <PercentageSlider
+            label={messages.resizeScalingLabel}
+            value={formValues.resize_scaling}
+            onChange={(value) => onOptionChange("resize_scaling", value)}
+            minPercent={0}
+            maxPercent={100}
+            disabled={disabled}
+          />
+        </div>
+        <NumberInput
+          label={messages.maxCrownToChinLabel}
+          suffix={messages.measurementUnitMm}
+          value={formValues.max_crown_to_chin_mm}
+          onChange={(value) => onOptionChange("max_crown_to_chin_mm", value)}
+          step={0.5}
+          min={10}
+          max={60}
+          disabled={disabled}
+        />
+        <NumberInput
+          label={messages.minCrownToChinLabel}
+          suffix={messages.measurementUnitMm}
+          value={formValues.min_crown_to_chin_mm}
+          onChange={(value) => onOptionChange("min_crown_to_chin_mm", value)}
+          step={0.5}
+          min={10}
+          max={60}
+          disabled={disabled}
+        />
+        <NumberInput
+          label={messages.targetCrownToChinLabel}
+          suffix={messages.measurementUnitMm}
+          value={formValues.target_crown_to_chin_mm}
+          onChange={(value) => onOptionChange("target_crown_to_chin_mm", value)}
+          step={0.5}
+          min={10}
+          max={60}
+          disabled={disabled}
+        />
+        <NumberInput
+          label={messages.maxExtraPaddingLabel}
+          suffix={messages.pixelsSuffix}
+          value={formValues.max_extra_padding_px}
+          onChange={(value) => onOptionChange("max_extra_padding_px", value)}
+          step={10}
+          min={0}
+          max={2000}
+          disabled={disabled}
+        />
+        <label className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 shadow-inner dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
           <input
             type="checkbox"
             checked={formValues.save_debug}
@@ -96,139 +153,87 @@ export function OptionsSection({
           />
         </div>
       </fieldset>
-
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((current) => !current)}
-          className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-slate-700 transition hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-400 dark:text-slate-200 dark:hover:text-white"
-          aria-expanded={showAdvanced}
-          aria-controls="advanced-options"
-          aria-label={messages.ariaAdvancedToggle}
-        >
-          <span>{messages.advancedHeading}</span>
-          <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
-            {messages.advancedSummary}
-          </span>
-        </button>
-        {showAdvanced && (
-          <div id="advanced-options" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <RatioInput
-              label={messages.targetRatioLabel}
-              value={formValues.target_w_over_h}
-              onChange={(value) => onOptionChange("target_w_over_h", value)}
-              min={0.5}
-              max={1.5}
-              disabled={disabled}
-            />
-            <PercentageSlider
-              label={messages.resizeScalingLabel}
-              value={formValues.resize_scaling}
-              onChange={(value) => onOptionChange("resize_scaling", value)}
-              minPercent={0}
-              maxPercent={100}
-              disabled={disabled}
-            />
-            {isClosedForm ? (
-              <>
-                <NumberInput
-                  label={messages.minTopMmLabel}
-                  suffix={messages.measurementUnitMm}
-                  value={formValues.min_top_mm}
-                  onChange={(value) => onOptionChange("min_top_mm", value)}
-                  step={0.5}
-                  min={0}
-                  disabled={disabled}
-                />
-                <NumberInput
-                  label={messages.minBottomMmLabel}
-                  suffix={messages.measurementUnitMm}
-                  value={formValues.min_bottom_mm}
-                  onChange={(value) => onOptionChange("min_bottom_mm", value)}
-                  step={0.5}
-                  min={0}
-                  disabled={disabled}
-                />
-                <NumberInput
-                  label={messages.shoulderClearanceLabel}
-                  suffix={messages.measurementUnitMm}
-                  value={formValues.shoulder_clearance_mm}
-                  onChange={(value) => onOptionChange("shoulder_clearance_mm", value)}
-                  step={0.5}
-                  min={0}
-                  disabled={disabled}
-                />
-              </>
-            ) : (
-              <>
-                <PercentageSlider
-                  label={messages.topMarginLabel}
-                  value={formValues.top_margin_ratio}
-                  onChange={(value) => onOptionChange("top_margin_ratio", value)}
-                  minPercent={0}
-                  maxPercent={50}
-                  disabled={disabled}
-                />
-                <PercentageSlider
-                  label={messages.bottomUpperLabel}
-                  value={formValues.bottom_upper_ratio}
-                  onChange={(value) => onOptionChange("bottom_upper_ratio", value)}
-                  minPercent={50}
-                  maxPercent={100}
-                  disabled={disabled}
-                />
-                <div className="sm:col-span-2">
-                  <CropPreview
-                    widthHeightRatio={formValues.target_w_over_h}
-                    topMarginRatio={formValues.top_margin_ratio}
-                    lowerFaceRatio={formValues.bottom_upper_ratio}
-                  />
-                </div>
-              </>
-            )}
-            <NumberInput
-              label={messages.maxCrownToChinLabel}
-              suffix={messages.measurementUnitMm}
-              value={formValues.max_crown_to_chin_mm}
-              onChange={(value) => onOptionChange("max_crown_to_chin_mm", value)}
-              step={0.5}
-              min={10}
-              max={60}
-              disabled={disabled}
-            />
-            <NumberInput
-              label={messages.minCrownToChinLabel}
-              suffix={messages.measurementUnitMm}
-              value={formValues.min_crown_to_chin_mm}
-              onChange={(value) => onOptionChange("min_crown_to_chin_mm", value)}
-              step={0.5}
-              min={10}
-              max={60}
-              disabled={disabled}
-            />
-            <NumberInput
-              label={messages.targetCrownToChinLabel}
-              suffix={messages.measurementUnitMm}
-              value={formValues.target_crown_to_chin_mm}
-              onChange={(value) => onOptionChange("target_crown_to_chin_mm", value)}
-              step={0.5}
-              min={10}
-              max={60}
-              disabled={disabled}
-            />
-            <NumberInput
-              label={messages.maxExtraPaddingLabel}
-              suffix={messages.pixelsSuffix}
-              value={formValues.max_extra_padding_px}
-              onChange={(value) => onOptionChange("max_extra_padding_px", value)}
-              step={10}
-              min={0}
-              max={2000}
-              disabled={disabled}
+      {isClosedForm ? (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <NumberInput
+            label={messages.minTopMmLabel}
+            suffix={messages.measurementUnitMm}
+            value={formValues.min_top_mm}
+            onChange={(value) => onOptionChange("min_top_mm", value)}
+            step={0.5}
+            min={0}
+            disabled={disabled}
+          />
+          <NumberInput
+            label={messages.minBottomMmLabel}
+            suffix={messages.measurementUnitMm}
+            value={formValues.min_bottom_mm}
+            onChange={(value) => onOptionChange("min_bottom_mm", value)}
+            step={0.5}
+            min={0}
+            disabled={disabled}
+          />
+          <NumberInput
+            label={messages.shoulderClearanceLabel}
+            suffix={messages.measurementUnitMm}
+            value={formValues.shoulder_clearance_mm}
+            onChange={(value) => onOptionChange("shoulder_clearance_mm", value)}
+            step={0.5}
+            min={0}
+            disabled={disabled}
+          />
+          <div className="sm:col-span-2">
+            <MmBudgetPreview
+              targetHeightMm={formValues.target_height_mm}
+              minTopMm={formValues.min_top_mm}
+              minBottomMm={formValues.min_bottom_mm}
+              shoulderClearanceMm={formValues.shoulder_clearance_mm}
+              minCrownToChinMm={formValues.min_crown_to_chin_mm}
+              maxCrownToChinMm={formValues.max_crown_to_chin_mm}
+              targetCrownToChinMm={formValues.target_crown_to_chin_mm}
+              unitLabel={messages.measurementUnitMm}
+              heading={messages.closedFormPreviewHeading}
+              description={messages.closedFormPreviewDescription}
+              topLabel={messages.closedFormPreviewTopLabel}
+              faceLabel={messages.closedFormPreviewFaceLabel}
+              bottomLabel={messages.closedFormPreviewBottomLabel}
+              totalLabel={messages.closedFormPreviewTotalLabel}
+              shoulderHint={messages.closedFormPreviewShoulderHint}
             />
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <PercentageSlider
+            label={messages.topMarginLabel}
+            value={formValues.top_margin_ratio}
+            onChange={(value) => onOptionChange("top_margin_ratio", value)}
+            minPercent={0}
+            maxPercent={50}
+            disabled={disabled}
+          />
+          <PercentageSlider
+            label={messages.bottomUpperLabel}
+            value={formValues.bottom_upper_ratio}
+            onChange={(value) => onOptionChange("bottom_upper_ratio", value)}
+            minPercent={50}
+            maxPercent={100}
+            disabled={disabled}
+          />
+          <div className="sm:col-span-2">
+            <CropPreview
+              widthHeightRatio={formValues.target_w_over_h}
+              topMarginRatio={formValues.top_margin_ratio}
+              lowerFaceRatio={formValues.bottom_upper_ratio}
+              heading={messages.legacyPreviewHeading}
+              description={messages.legacyPreviewDescription}
+              aspectLabel={messages.legacyPreviewAspectLabel}
+              topMarginLabel={messages.legacyPreviewTopLabel}
+              bottomPaddingLabel={messages.legacyPreviewBottomLabel}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs text-slate-500 dark:text-slate-400">{messages.processingTimeHint}</div>

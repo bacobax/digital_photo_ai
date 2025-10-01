@@ -8,9 +8,23 @@ export type CropPreviewProps = {
   widthHeightRatio: number;
   topMarginRatio: number;
   lowerFaceRatio: number;
+  heading: string;
+  description: string;
+  aspectLabel: string;
+  topMarginLabel: string;
+  bottomPaddingLabel: string;
 };
 
-export function CropPreview({ widthHeightRatio, topMarginRatio, lowerFaceRatio }: CropPreviewProps) {
+export function CropPreview({
+  widthHeightRatio,
+  topMarginRatio,
+  lowerFaceRatio,
+  heading,
+  description,
+  aspectLabel,
+  topMarginLabel,
+  bottomPaddingLabel,
+}: CropPreviewProps) {
   const geometry = useMemo(
     () => computeGeometry(widthHeightRatio, topMarginRatio, lowerFaceRatio),
     [lowerFaceRatio, topMarginRatio, widthHeightRatio],
@@ -18,10 +32,8 @@ export function CropPreview({ widthHeightRatio, topMarginRatio, lowerFaceRatio }
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/80 p-4 shadow-inner dark:border-slate-700 dark:bg-slate-900/60">
-      <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">Live framing preview</div>
-      <div className="text-xs text-slate-500 dark:text-slate-400">
-        Adjust the controls to see how the top margin, lower face ratio, and width/height ratio change the crop box and face placement.
-      </div>
+      <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">{heading}</div>
+      <div className="text-xs text-slate-500 dark:text-slate-400">{description}</div>
       <div className="relative mx-auto w-full max-w-[180px] rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900/70">
         <div
           className="relative w-full"
@@ -47,9 +59,9 @@ export function CropPreview({ widthHeightRatio, topMarginRatio, lowerFaceRatio }
         </div>
       </div>
       <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-400 sm:grid-cols-3">
-        <Stat label="Aspect" value={`${geometry.safeRatio.toFixed(2)} : 1`} />
-        <Stat label="Top margin" value={`${(geometry.topMarginPercent).toFixed(0)}%`} />
-        <Stat label="Lower padding" value={`${geometry.bottomMarginPercent.toFixed(0)}%`} />
+        <Stat label={aspectLabel} value={`${geometry.safeRatio.toFixed(2)} : 1`} />
+        <Stat label={topMarginLabel} value={`${geometry.topMarginPercent.toFixed(0)}%`} />
+        <Stat label={bottomPaddingLabel} value={`${geometry.bottomMarginPercent.toFixed(0)}%`} />
       </div>
     </div>
   );
