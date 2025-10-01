@@ -143,6 +143,21 @@ export const MESSAGES: Record<Language, Messages> = {
     overlayHeading: "Interactive measurement preview",
     overlayLegendHeading: "Legend",
     resizeScalingLabel: "Preserve quality",
+    legacyPreviewHeading: "Legacy framing preview",
+    legacyPreviewDescription:
+      "Visualise how ratio-based margins place the face within the crop box.",
+    legacyPreviewAspectLabel: "Aspect",
+    legacyPreviewTopLabel: "Top margin",
+    legacyPreviewBottomLabel: "Lower padding",
+    closedFormPreviewHeading: "Closed-form mm budget",
+    closedFormPreviewDescription:
+      "See how millimetre limits are allocated between top margin, face span, and bottom margin.",
+    closedFormPreviewTopLabel: "Top allowance",
+    closedFormPreviewFaceLabel: "Face span",
+    closedFormPreviewBottomLabel: "Bottom allowance",
+    closedFormPreviewTotalLabel: "Total height",
+    closedFormPreviewShoulderHint:
+      "Shoulders require at least {clearance} of clearance below the chin when detected.",
   },
   it: {
     appTitle: "Assistente foto digitale",
@@ -285,6 +300,21 @@ export const MESSAGES: Record<Language, Messages> = {
     overlayHeading: "Anteprima interattiva delle misure",
     overlayLegendHeading: "Legenda",
     resizeScalingLabel: "Mantieni qualità",
+    legacyPreviewHeading: "Anteprima in modalità legacy",
+    legacyPreviewDescription:
+      "Visualizza come i margini basati sui rapporti posizionano il volto nel ritaglio.",
+    legacyPreviewAspectLabel: "Proporzione",
+    legacyPreviewTopLabel: "Margine superiore",
+    legacyPreviewBottomLabel: "Padding inferiore",
+    closedFormPreviewHeading: "Budget in mm (formule chiuse)",
+    closedFormPreviewDescription:
+      "Mostra come i limiti in millimetri vengono distribuiti tra margine superiore, volto e margine inferiore.",
+    closedFormPreviewTopLabel: "Margine superiore",
+    closedFormPreviewFaceLabel: "Altezza volto",
+    closedFormPreviewBottomLabel: "Margine inferiore",
+    closedFormPreviewTotalLabel: "Altezza totale",
+    closedFormPreviewShoulderHint:
+      "Le spalle richiedono almeno {clearance} di spazio sotto il mento quando rilevate.",
   },
   es: {
     appTitle: "Asistente de fotos digital",
@@ -427,5 +457,20 @@ export const MESSAGES: Record<Language, Messages> = {
     overlayHeading: "Vista interactiva de medidas",
     overlayLegendHeading: "Leyenda",
     resizeScalingLabel: "Mantener calidad",
+    legacyPreviewHeading: "Vista previa modo legacy",
+    legacyPreviewDescription:
+      "Visualiza cómo los márgenes basados en proporciones colocan el rostro dentro del recorte.",
+    legacyPreviewAspectLabel: "Proporción",
+    legacyPreviewTopLabel: "Margen superior",
+    legacyPreviewBottomLabel: "Acolchado inferior",
+    closedFormPreviewHeading: "Presupuesto en mm (forma cerrada)",
+    closedFormPreviewDescription:
+      "Muestra cómo se reparten los límites en milímetros entre margen superior, rostro y margen inferior.",
+    closedFormPreviewTopLabel: "Margen superior",
+    closedFormPreviewFaceLabel: "Altura del rostro",
+    closedFormPreviewBottomLabel: "Margen inferior",
+    closedFormPreviewTotalLabel: "Altura total",
+    closedFormPreviewShoulderHint:
+      "Los hombros necesitan al menos {clearance} de espacio bajo el mentón cuando se detectan.",
   },
 };
