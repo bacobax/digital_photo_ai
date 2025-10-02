@@ -114,7 +114,7 @@ function BudgetSegment({ percent, label, value, tone, limited }: BudgetSegmentPr
       <span>{label}</span>
       <span className="text-[0.65rem] font-normal normal-case text-slate-600 dark:text-slate-300">{value}</span>
       {limited && (
-        <span className="text-[0.6rem] font-semibold uppercase text-amber-600 dark:text-amber-300">Min</span>
+        <span className="text-[0.6rem] font-semibold uppercase text-amber-600 dark:text-amber-300">Limit</span>
       )}
     </div>
   );
@@ -152,19 +152,17 @@ function computeBudgetGeometry({
   targetCrownToChinMm,
 }: MmBudgetPreviewProps): MmBudgetGeometry {
   const safeTargetHeight = Math.max(targetHeightMm, 1);
-  const minTop = Math.max(0, minTopMm);
+  const requestedTop = Math.max(0, minTopMm);
   const crownMin = Math.max(1, minCrownToChinMm);
   const crownMax = Math.max(crownMin, maxCrownToChinMm);
+  const desiredFace = Math.max(0, targetCrownToChinMm);
 
-  let faceMm = clamp(targetCrownToChinMm, crownMin, crownMax);
-  const maxFaceBudget = Math.max(crownMin, safeTargetHeight - minTop);
-  faceMm = clamp(faceMm, crownMin, maxFaceBudget);
-
-  const topMm = Math.min(Math.max(minTop, safeTargetHeight - faceMm), safeTargetHeight);
-  const bottomMm = Math.max(0, safeTargetHeight - faceMm - topMm);
-
+  const faceMm = clamp(desiredFace, crownMin, crownMax);
+  const topMm = requestedTop;
+  const bottomMm = Math.max(0, safeTargetHeight - topMm - faceMm);
   const totalMm = topMm + faceMm + bottomMm;
   const normaliser = totalMm > 0 ? totalMm : 1;
+  const topCapacity = Math.max(0, safeTargetHeight - faceMm);
 
   return {
     topMm,
@@ -174,9 +172,12 @@ function computeBudgetGeometry({
     topPercent: (topMm / normaliser) * 100,
     facePercent: (faceMm / normaliser) * 100,
     bottomPercent: (bottomMm / normaliser) * 100,
-    topLimited: topMm <= minTop + 0.05,
+    topLimited: topMm > topCapacity + 0.05,
     bottomLimited: bottomMm <= 0.05,
-    faceLimited: Math.abs(faceMm - crownMin) <= 0.05 || Math.abs(faceMm - maxFaceBudget) <= 0.05,
+    faceLimited:
+      Math.abs(faceMm - desiredFace) > 0.05 ||
+      Math.abs(faceMm - crownMin) <= 0.05 ||
+      Math.abs(faceMm - crownMax) <= 0.05,
   };
 }
 
