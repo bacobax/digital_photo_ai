@@ -4,7 +4,6 @@ import { useMemo } from "react";
 type MmBudgetPreviewProps = {
   targetHeightMm: number;
   minTopMm: number;
-  minBottomMm: number;
   shoulderClearanceMm: number;
   minCrownToChinMm: number;
   maxCrownToChinMm: number;
@@ -18,8 +17,6 @@ type MmBudgetPreviewProps = {
   shoulderHint: string;
   totalLabel: string;
 };
-
-const EPSILON = 1e-3;
 
 type MmBudgetGeometry = {
   topMm: number;
@@ -150,41 +147,21 @@ function formatMm(value: number, unitLabel: string) {
 function computeBudgetGeometry({
   targetHeightMm,
   minTopMm,
-  minBottomMm,
   minCrownToChinMm,
   maxCrownToChinMm,
   targetCrownToChinMm,
 }: MmBudgetPreviewProps): MmBudgetGeometry {
   const safeTargetHeight = Math.max(targetHeightMm, 1);
   const minTop = Math.max(0, minTopMm);
-  const minBottom = Math.max(0, minBottomMm);
   const crownMin = Math.max(1, minCrownToChinMm);
   const crownMax = Math.max(crownMin, maxCrownToChinMm);
 
   let faceMm = clamp(targetCrownToChinMm, crownMin, crownMax);
+  const maxFaceBudget = Math.max(crownMin, safeTargetHeight - minTop);
+  faceMm = clamp(faceMm, crownMin, maxFaceBudget);
 
-  const reduceFace = () => {
-    const candidate = clamp(safeTargetHeight - minTop - minBottom, crownMin, faceMm);
-    faceMm = candidate;
-  };
-
-  let topMm = safeTargetHeight - faceMm - minBottom;
-  if (topMm < minTop - EPSILON) {
-    reduceFace();
-    topMm = safeTargetHeight - faceMm - minBottom;
-  }
-
-  if (topMm < minTop) {
-    topMm = Math.max(0, minTop);
-  }
-
-  let bottomMm = safeTargetHeight - faceMm - topMm;
-  if (bottomMm < minBottom) {
-    bottomMm = minBottom;
-    const remaining = safeTargetHeight - bottomMm;
-    faceMm = clamp(Math.max(remaining - topMm, crownMin), crownMin, faceMm);
-    topMm = Math.max(minTop, remaining - faceMm);
-  }
+  const topMm = Math.min(Math.max(minTop, safeTargetHeight - faceMm), safeTargetHeight);
+  const bottomMm = Math.max(0, safeTargetHeight - faceMm - topMm);
 
   const totalMm = topMm + faceMm + bottomMm;
   const normaliser = totalMm > 0 ? totalMm : 1;
@@ -198,8 +175,8 @@ function computeBudgetGeometry({
     facePercent: (faceMm / normaliser) * 100,
     bottomPercent: (bottomMm / normaliser) * 100,
     topLimited: topMm <= minTop + 0.05,
-    bottomLimited: bottomMm <= minBottom + 0.05,
-    faceLimited: Math.abs(faceMm - crownMin) <= 0.05 || Math.abs(faceMm - crownMax) <= 0.05,
+    bottomLimited: bottomMm <= 0.05,
+    faceLimited: Math.abs(faceMm - crownMin) <= 0.05 || Math.abs(faceMm - maxFaceBudget) <= 0.05,
   };
 }
 

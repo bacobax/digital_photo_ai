@@ -63,6 +63,7 @@ export type FaceResult = {
   markers: FaceMarker[];
   spans: FaceSpan[];
   pxPerMm: number | null;
+  topMarginWarning: TopMarginWarning | null;
 };
 
 export type Toast = {
@@ -192,6 +193,11 @@ export type Messages = {
   closedFormPreviewBottomLabel: string;
   closedFormPreviewTotalLabel: string;
   closedFormPreviewShoulderHint: string;
+  topMarginWarningHeading: string;
+  topMarginWarningDescription: string;
+  topMarginWarningAchieved: string;
+  topMarginWarningShoulder: string;
+  topMarginWarningSource: string;
 };
 
 export type FormValuesState = {
@@ -209,7 +215,6 @@ export type FormValuesState = {
   max_extra_padding_px: number;
   resize_scaling: number;
   min_top_mm: number;
-  min_bottom_mm: number;
   shoulder_clearance_mm: number;
 };
 
@@ -269,6 +274,15 @@ export type ResultsSectionProps = {
   onDownloadAsset: (asset: ImageAsset | null) => void;
   zipBlob: Blob | null;
   badgeStyles: BadgeStyles;
+};
+
+export type TopMarginWarning = {
+  requested: number | null;
+  achieved: number | null;
+  maxSupported: number | null;
+  sourceSupported: number | null;
+  exceedsShoulders: boolean;
+  exceedsSource: boolean;
 };
 
 export type AnnotatedPreviewProps = {

@@ -238,27 +238,41 @@ def _process_request(
     target_crown_to_chin_mm: float,
     max_extra_padding_px: int,
     min_top_mm: float,
-    min_bottom_mm: float,
+    min_bottom_mm: Optional[float],
     shoulder_clearance_mm: float,
 ) -> StreamingResponse:
     normalized_mode = _normalise_pipeline_name(pipeline_mode)
     scaling = _clamp_resize_scaling(resize_scaling)
+    target_w_over_h_f = float(target_w_over_h)
+    top_margin_ratio_f = float(top_margin_ratio)
+    bottom_upper_ratio_f = float(bottom_upper_ratio)
+    target_height_mm_f = float(target_height_mm)
+    min_height_px_i = int(min_height_px)
+    min_width_px_i = int(min_width_px)
+    max_crown_to_chin_mm_f = float(max_crown_to_chin_mm)
+    min_crown_to_chin_mm_f = float(min_crown_to_chin_mm)
+    target_crown_to_chin_mm_f = float(target_crown_to_chin_mm)
+    max_extra_padding_px_i = int(max_extra_padding_px)
+    min_top_mm_f = float(min_top_mm)
+    shoulder_clearance_mm_f = float(shoulder_clearance_mm)
+    derived_min_bottom_mm = max(0.0, target_height_mm_f - min_top_mm_f - target_crown_to_chin_mm_f)
+
     params = RunParameters(
-        target_w_over_h=float(target_w_over_h),
-        top_margin_ratio=float(top_margin_ratio),
-        bottom_upper_ratio=float(bottom_upper_ratio),
-        target_height_mm=float(target_height_mm),
-        min_height_px=int(min_height_px),
-        min_width_px=int(min_width_px),
+        target_w_over_h=target_w_over_h_f,
+        top_margin_ratio=top_margin_ratio_f,
+        bottom_upper_ratio=bottom_upper_ratio_f,
+        target_height_mm=target_height_mm_f,
+        min_height_px=min_height_px_i,
+        min_width_px=min_width_px_i,
         resize_scaling=scaling,
-        max_crown_to_chin_mm=float(max_crown_to_chin_mm),
-        min_crown_to_chin_mm=float(min_crown_to_chin_mm),
-        target_crown_to_chin_mm=float(target_crown_to_chin_mm),
-        max_extra_padding_px=int(max_extra_padding_px),
+        max_crown_to_chin_mm=max_crown_to_chin_mm_f,
+        min_crown_to_chin_mm=min_crown_to_chin_mm_f,
+        target_crown_to_chin_mm=target_crown_to_chin_mm_f,
+        max_extra_padding_px=max_extra_padding_px_i,
         lock_ratio_after_resize=True,
-        min_top_mm=float(min_top_mm),
-        min_bottom_mm=float(min_bottom_mm),
-        shoulder_clearance_mm=float(shoulder_clearance_mm),
+        min_top_mm=min_top_mm_f,
+        min_bottom_mm=derived_min_bottom_mm,
+        shoulder_clearance_mm=shoulder_clearance_mm_f,
         use_closed_form=normalized_mode != "legacy",
     )
 
@@ -351,7 +365,7 @@ async def process_image(
         target_crown_to_chin_mm=target_crown_to_chin_mm,
         max_extra_padding_px=max_extra_padding_px,
         min_top_mm=defaults.min_top_mm,
-        min_bottom_mm=defaults.min_bottom_mm,
+        min_bottom_mm=None,
         shoulder_clearance_mm=defaults.shoulder_clearance_mm,
     )
 
@@ -378,7 +392,7 @@ async def process_image_v2(
     target_crown_to_chin_mm: float = Form(34.0),
     max_extra_padding_px: int = Form(600),
     min_top_mm: float = Form(4.0),
-    min_bottom_mm: float = Form(8.0),
+    min_bottom_mm: Optional[float] = Form(None),
     shoulder_clearance_mm: float = Form(3.0),
 ) -> StreamingResponse:
     """Run the configurable portrait-framing pipeline with closed-form support."""
