@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, CSSProperties } from "react";
 import { useMemo, useState } from "react";
 import classNames from "classnames";
 
@@ -381,6 +381,22 @@ type PercentageSliderProps = {
 
 function PercentageSlider({ label, value, onChange, minPercent, maxPercent, disabled }: PercentageSliderProps) {
   const sliderValue = clamp(Math.round(value * 100), minPercent, maxPercent);
+  const percentRange = Math.max(maxPercent - minPercent, 1);
+  const progress = ((sliderValue - minPercent) / percentRange) * 100;
+  const percent = clamp(Number.isFinite(progress) ? progress : 0, 0, 100);
+  const thumbHue = 120 * (percent / 100);
+  const thumbAccent = `hsla(${Math.round(thumbHue)}, 95%, 60%, 0.35)`;
+  const thumbHighlight = `hsla(${Math.round(thumbHue)}, 90%, 55%, 0.6)`;
+  const thumbStyle = useMemo(
+    () =>
+      ({
+        left: `${percent}%`,
+        backgroundImage: `linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.08)), radial-gradient(circle at 28% 28%, rgba(255,255,255,0.85), rgba(255,255,255,0) 60%), linear-gradient(90deg, ${thumbAccent}, ${thumbHighlight})`,
+        borderColor: thumbHighlight,
+        boxShadow: `0 12px 24px -14px rgba(15,23,42,0.65), 0 0 0 1px ${thumbHighlight}, 0 0 18px ${thumbAccent}`,
+      }) as CSSProperties,
+    [percent, thumbAccent, thumbHighlight],
+  );
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextPercent = Number.parseInt(event.target.value, 10);
@@ -397,16 +413,27 @@ function PercentageSlider({ label, value, onChange, minPercent, maxPercent, disa
         <span>{label}</span>
         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{sliderValue}%</span>
       </span>
-      <input
-        type="range"
-        min={minPercent}
-        max={maxPercent}
-        value={sliderValue}
-        step={1}
-        disabled={disabled}
-        onChange={handleChange}
-        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-sky-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:bg-slate-700"
-      />
+      <div
+        className={classNames(
+          "funnel-slider",
+          disabled && "pointer-events-none opacity-60",
+        )}
+      >
+        <div className="funnel-track-base" aria-hidden="true" />
+        <div className="funnel-track-fill" aria-hidden="true" style={{ width: `${percent}%` }} />
+        <div className="funnel-slider-thumb" aria-hidden="true" style={thumbStyle} />
+        <input
+          type="range"
+          min={minPercent}
+          max={maxPercent}
+          value={sliderValue}
+          step={1}
+          disabled={disabled}
+          onChange={handleChange}
+          className="funnel-slider-input"
+          aria-label={label}
+        />
+      </div>
     </label>
   );
 }

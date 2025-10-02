@@ -13,3 +13,67 @@ body {
     color-scheme: dark;
   }
 }
+
+.funnel-slider {
+  @apply relative h-9 w-full rounded-full transition;
+}
+
+.funnel-slider:focus-within {
+  @apply ring-2 ring-sky-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900;
+}
+
+.funnel-track-base,
+.funnel-track-fill {
+  background: linear-gradient(90deg, #ef4444 0%, #f97316 30%, #facc15 65%, #22c55e 100%);
+  clip-path: polygon(0% 65%, 0% 35%, 100% 0%, 100% 100%);
+}
+
+.funnel-track-base {
+  @apply absolute inset-0 rounded-full opacity-30;
+  z-index: 0;
+}
+
+.funnel-track-fill {
+  @apply absolute inset-y-0 left-0 rounded-full;
+  z-index: 1;
+}
+
+.funnel-slider-thumb {
+  @apply pointer-events-none absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full transition;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.12));
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 12px 24px -14px rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.funnel-slider-thumb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+      circle at 30% 30%,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0) 60%
+    ),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.dark .funnel-slider-thumb {
+  border-color: rgba(15, 23, 42, 0.6);
+  box-shadow: 0 12px 24px -14px rgba(0, 0, 0, 0.7);
+}
+
+.funnel-slider-input {
+  @apply absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-full bg-transparent focus-visible:outline-none;
+  z-index: 3;
+}
+
+.funnel-slider-input:disabled {
+  @apply cursor-not-allowed;
+}
