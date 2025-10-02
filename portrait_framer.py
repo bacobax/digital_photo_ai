@@ -143,6 +143,7 @@ class FacePipelineItem:
     mm_top_margin_mm: Optional[float] = None
     mm_bottom_margin_mm: Optional[float] = None
     mm_crown_to_chin_mm: Optional[float] = None
+    mm_shoulder_requirement_mm: Optional[float] = None
     mm_budget_limited_top: bool = False
     mm_budget_limited_bottom: bool = False
     mm_budget_limited_bounds: bool = False
@@ -345,23 +346,44 @@ class FaceFramingPipeline:
             limited_bottom = False
             limited_bounds = False
 
-            for _ in range(8):
-                t_mm, b_mm, shoulder_req = compute_margins(c_mm)
-                if t_mm >= min_top_mm - 1e-3:
-                    break
-                if math.isfinite(shoulder_req) and shoulder_req >= min_bottom_mm - 1e-3 and shoulder_ratio is not None:
-                    denom = 1.0 + shoulder_ratio
-                    numer = target_height_mm - delta_mm - min_top_mm
-                    if denom > 1e-6:
-                        c_candidate = numer / denom
-                    else:
-                        c_candidate = c_min
+            # Closed-form upper bounds for the face span respecting mm limits.
+            c_upper_from_top = target_height_mm - min_top_mm - min_bottom_mm
+            c_upper_from_top = max(0.0, c_upper_from_top)
+            c_switch = float("inf")
+            shoulder_limit = float("inf")
+            shoulder_ratio_valid = (
+                shoulder_ratio if shoulder_ratio is not None and shoulder_ratio > 1e-6 else None
+            )
+            if shoulder_ratio_valid is not None:
+                if delta_mm >= min_bottom_mm:
+                    c_switch = 0.0
                 else:
-                    c_candidate = target_height_mm - min_top_mm - min_bottom_mm
-                c_candidate = float(np.clip(c_candidate, c_min, c_max))
-                if c_candidate >= c_mm - 1e-3:
-                    break
-                c_mm = c_candidate
+                    c_switch = (min_bottom_mm - delta_mm) / shoulder_ratio_valid
+                    c_switch = max(0.0, c_switch)
+                denom = 1.0 + shoulder_ratio_valid
+                if denom > 1e-6:
+                    shoulder_limit = (target_height_mm - delta_mm - min_top_mm) / denom
+                else:
+                    shoulder_limit = 0.0
+                if not math.isfinite(shoulder_limit):
+                    shoulder_limit = 0.0
+                shoulder_limit = max(0.0, shoulder_limit)
+
+            c_feasible_max = min(c_max, c_upper_from_top)
+            if shoulder_ratio_valid is not None:
+                if shoulder_limit < c_switch - 1e-6:
+                    c_feasible_max = min(c_feasible_max, c_switch)
+                else:
+                    c_feasible_max = min(c_feasible_max, shoulder_limit)
+
+            c_limit = max(0.0, c_feasible_max)
+            if c_limit < c_min:
+                if c_limit < c_min - 1e-6:
+                    limited_top = True
+                c_limit = c_min
+            if c_mm > c_limit + 1e-6:
+                limited_top = True
+            c_mm = float(np.clip(c_mm, c_min, c_limit))
 
             t_mm, b_mm, shoulder_req = compute_margins(c_mm)
             if t_mm < min_top_mm - 1e-3:
@@ -475,6 +497,9 @@ class FaceFramingPipeline:
             item.mm_top_margin_mm = actual_top_mm
             item.mm_bottom_margin_mm = actual_bottom_mm
             item.mm_crown_to_chin_mm = c_mm
+            item.mm_shoulder_requirement_mm = (
+                float(shoulder_req) if math.isfinite(shoulder_req) else None
+            )
             item.min_height_req_px = None
             item.max_height_req_px = None
 
@@ -485,6 +510,8 @@ class FaceFramingPipeline:
                 notes.append("bottom limited")
             if limited_bounds:
                 notes.append("bounds limited")
+            if math.isfinite(shoulder_req) and shoulder_req > min_bottom_mm + 1e-3:
+                notes.append(f"shoulder ≥{shoulder_req:.1f}mm")
             note_str = f" ({', '.join(notes)})" if notes else ""
 
             print(
@@ -528,6 +555,7 @@ class FaceFramingPipeline:
         item.mm_top_margin_mm = None
         item.mm_bottom_margin_mm = None
         item.mm_crown_to_chin_mm = None
+        item.mm_shoulder_requirement_mm = None
         item.mm_budget_limited_top = False
         item.mm_budget_limited_bottom = False
         item.mm_budget_limited_bounds = False
@@ -1168,6 +1196,8 @@ class FaceFramingPipeline:
             metrics.append(f"hair-chin {item.hair_to_chin_mm:.2f} mm")
         if item.forehead_to_chin_mm is not None:
             metrics.append(f"forehead-chin {item.forehead_to_chin_mm:.2f} mm")
+        if item.mm_shoulder_requirement_mm is not None:
+            metrics.append(f"shoulder≥{item.mm_shoulder_requirement_mm:.2f} mm")
 
         if self.save_debug:
             crops_dir = os.path.join(self.logdir, "stage6_final")
@@ -1418,6 +1448,8 @@ class FaceFramingPipeline:
                 info_lines.append(f"face={item.mm_crown_to_chin_mm:.1f}mm")
             if item.mm_bottom_margin_mm is not None:
                 info_lines.append(f"bottom={item.mm_bottom_margin_mm:.1f}mm")
+            if item.mm_shoulder_requirement_mm is not None:
+                info_lines.append(f"shoulder≥{item.mm_shoulder_requirement_mm:.1f}mm")
             if info_lines:
                 cv2.putText(
                     crop_vis,
@@ -1580,6 +1612,7 @@ class FaceProcessingResult:
     crown_to_chin_mm: Optional[float]
     hair_to_chin_mm: Optional[float]
     forehead_to_chin_mm: Optional[float]
+    shoulder_requirement_mm: Optional[float]
     chin: LandmarkMeasurement
     crown: LandmarkMeasurement
     forehead: LandmarkMeasurement
@@ -1592,6 +1625,7 @@ class FaceProcessingResult:
             "crown_to_chin_mm": self.crown_to_chin_mm,
             "hair_to_chin_mm": self.hair_to_chin_mm,
             "forehead_to_chin_mm": self.forehead_to_chin_mm,
+            "shoulder_requirement_mm": self.shoulder_requirement_mm,
             "chin_px": self.chin.px,
             "chin_mm": self.chin.mm,
             "crown_px": self.crown.px,
@@ -1660,6 +1694,7 @@ class PortraitFramer:
                     crown_to_chin_mm=item.crown_to_chin_mm,
                     hair_to_chin_mm=item.hair_to_chin_mm,
                     forehead_to_chin_mm=item.forehead_to_chin_mm,
+                    shoulder_requirement_mm=item.mm_shoulder_requirement_mm,
                     chin=to_measurement(item.chin_y_local),
                     crown=to_measurement(item.crown_y_local),
                     forehead=to_measurement(item.top_face_y_local),
