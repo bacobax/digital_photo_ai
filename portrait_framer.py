@@ -322,100 +322,39 @@ class FaceFramingPipeline:
                 self._fallback_to_original_crop(idx, item, box)
                 continue
 
-            shoulder_ratio = None
-            shoulder_px = None
-            if shoulder_y is not None and math.isfinite(shoulder_y):
-                shoulder_px = float(shoulder_y - chin_y)
-                if shoulder_px > 0:
-                    shoulder_ratio = shoulder_px / d_px
 
-            c_mm = float(np.clip(c_target, c_min, c_max))
+            h_crop = d_px * (target_height_mm / c_target)
+            max_top_mm = (target_height_mm/h_crop) * chin_y - (target_height_mm/h_crop) * shoulder_y - c_target + target_height_mm - delta_mm
+            source_max_top_mm = crown_y * (c_target/d_px)
+            print(f"max top mm margin: {max_top_mm}")
 
-            def compute_margins(c_val: float) -> Tuple[float, float, float]:
-                shoulder_req = float("-inf")
-                if shoulder_ratio is not None:
-                    shoulder_req = shoulder_ratio * c_val + delta_mm
-                if math.isfinite(shoulder_req):
-                    b_val = max(min_bottom_mm, shoulder_req)
-                else:
-                    b_val = min_bottom_mm
-                t_val = target_height_mm - c_val - b_val
-                return t_val, b_val, shoulder_req
+            if max_top_mm < min_top_mm or source_max_top_mm < min_top_mm:
+                print(f"You decided to have a minimum margin of {min_top_mm} mm, but the max you can have is min({max_top_mm}, {source_max_top_mm}) = {min(max_top_mm, source_max_top_mm)}")
 
-            limited_top = False
-            limited_bottom = False
-            limited_bounds = False
 
-            # Closed-form upper bounds for the face span respecting mm limits.
-            c_upper_from_top = target_height_mm - min_top_mm - min_bottom_mm
-            c_upper_from_top = max(0.0, c_upper_from_top)
-            c_switch = float("inf")
-            shoulder_limit = float("inf")
-            shoulder_ratio_valid = (
-                shoulder_ratio if shoulder_ratio is not None and shoulder_ratio > 1e-6 else None
-            )
-            if shoulder_ratio_valid is not None:
-                if delta_mm >= min_bottom_mm:
-                    c_switch = 0.0
-                else:
-                    c_switch = (min_bottom_mm - delta_mm) / shoulder_ratio_valid
-                    c_switch = max(0.0, c_switch)
-                denom = 1.0 + shoulder_ratio_valid
-                if denom > 1e-6:
-                    shoulder_limit = (target_height_mm - delta_mm - min_top_mm) / denom
-                else:
-                    shoulder_limit = 0.0
-                if not math.isfinite(shoulder_limit):
-                    shoulder_limit = 0.0
-                shoulder_limit = max(0.0, shoulder_limit)
+            #actual_top_mm = float(input(f"choose a margin which is below {max_top_mm} and {source_max_top_mm} mm: "))
+            actual_top_mm = min(max_top_mm, source_max_top_mm)
+            
+            
 
-            c_feasible_max = min(c_max, c_upper_from_top)
-            if shoulder_ratio_valid is not None:
-                if shoulder_limit < c_switch - 1e-6:
-                    c_feasible_max = min(c_feasible_max, c_switch)
-                else:
-                    c_feasible_max = min(c_feasible_max, shoulder_limit)
+            w_crop = h_crop * ratio
+            y_crop_top = crown_y - (actual_top_mm/c_target)*d_px
+            actual_bottom_mm = target_height_mm - actual_top_mm - c_target
 
-            c_limit = max(0.0, c_feasible_max)
-            if c_limit < c_min:
-                if c_limit < c_min - 1e-6:
-                    limited_top = True
-                c_limit = c_min
-            if c_mm > c_limit + 1e-6:
-                limited_top = True
-            c_mm = float(np.clip(c_mm, c_min, c_limit))
+            px_to_mm = c_target/d_px
 
-            t_mm, b_mm, shoulder_req = compute_margins(c_mm)
-            if t_mm < min_top_mm - 1e-3:
-                limited_top = True
-                t_mm = max(0.0, t_mm)
+            top_px = actual_top_mm / px_to_mm
+            bottom_px = actual_bottom_mm / px_to_mm
 
-            mm_per_px_face = c_mm / d_px
-            top_px_target = (t_mm / c_mm) * d_px if c_mm > 1e-6 else 0.0
-            bottom_px_target = (b_mm / c_mm) * d_px if c_mm > 1e-6 else 0.0
+            print(f"C1: {actual_top_mm}mm, C2: {c_target}mm, C3: {actual_bottom_mm}mm. SUM = {actual_top_mm + c_target + actual_bottom_mm}")
+            print(f"C1_px: {top_px}px, C2_px: {d_px}, C3_px: {bottom_px}")
 
-            top_available = float(np.clip(crown_y, 0.0, H))
-            bottom_available = float(np.clip(H - chin_y, 0.0, H))
-
-            top_px = min(top_px_target, top_available)
-            if top_px < top_px_target - 1e-3:
-                limited_top = True
-
-            bottom_px = min(bottom_px_target, bottom_available)
-            if bottom_px < bottom_px_target - 1e-3:
-                limited_bottom = True
-
-            if shoulder_ratio is not None and shoulder_px is not None:
-                clearance_px = delta_mm / mm_per_px_face if mm_per_px_face > 0 else 0.0
-                shoulder_needed = max(0.0, shoulder_px + clearance_px)
-                if bottom_available >= shoulder_needed and bottom_px < shoulder_needed - 1e-3:
-                    bottom_px = shoulder_needed
-                if bottom_px < shoulder_needed - 1e-3:
-                    limited_bottom = True
-                    bottom_px = min(bottom_px, bottom_available)
 
             top_px = max(0.0, top_px)
             bottom_px = max(0.0, bottom_px)
+            limited_top = False
+            limited_bottom = False
+            limited_bounds = False
 
             y1 = float(crown_y - top_px)
             y2 = float(chin_y + bottom_px)
@@ -492,14 +431,12 @@ class FaceFramingPipeline:
             item.mm_budget_limited_bottom = limited_bottom
             item.mm_budget_limited_bounds = limited_bounds
 
-            actual_top_mm = max(0.0, top_px * mm_per_px_face)
-            actual_bottom_mm = max(0.0, bottom_px * mm_per_px_face)
+            actual_top_mm = max(0.0, top_px * px_to_mm)
+            actual_bottom_mm = max(0.0, bottom_px * px_to_mm)
             item.mm_top_margin_mm = actual_top_mm
             item.mm_bottom_margin_mm = actual_bottom_mm
-            item.mm_crown_to_chin_mm = c_mm
-            item.mm_shoulder_requirement_mm = (
-                float(shoulder_req) if math.isfinite(shoulder_req) else None
-            )
+            item.mm_crown_to_chin_mm = c_target
+            
             item.min_height_req_px = None
             item.max_height_req_px = None
 
@@ -510,14 +447,17 @@ class FaceFramingPipeline:
                 notes.append("bottom limited")
             if limited_bounds:
                 notes.append("bounds limited")
-            if math.isfinite(shoulder_req) and shoulder_req > min_bottom_mm + 1e-3:
-                notes.append(f"shoulder ≥{shoulder_req:.1f}mm")
+          
             note_str = f" ({', '.join(notes)})" if notes else ""
 
             print(
                 f"  [Face {idx}] mm-budget -> top {actual_top_mm:.2f} mm | "
-                f"face {c_mm:.2f} mm | bottom {actual_bottom_mm:.2f} mm{note_str}"
+                f"face {c_target:.2f} mm | bottom {actual_bottom_mm:.2f} mm{note_str}"
             )
+
+
+
+
 
         if self.save_debug:
             self._save_mm_budget_debug()
