@@ -20,6 +20,7 @@ import type {
   Messages,
   NormalizedMeasurement,
   MeasurementLabelKey,
+  TopMarginWarning,
 } from "./types";
 
 export function resolveApiEndpoint() {
@@ -199,6 +200,25 @@ function coerceNumber(value: unknown): number | null {
   return null;
 }
 
+function coerceBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "yes") {
+      return true;
+    }
+    if (normalized === "false" || normalized === "0" || normalized === "no") {
+      return false;
+    }
+  }
+  return false;
+}
+
 function pickValue(source: RawFaceMetadata | null, keys: string[]) {
   if (!source) {
     return undefined;
@@ -308,6 +328,45 @@ function buildFaceGuides(raw: RawFaceMetadata | null, messages: Messages) {
   const markers = buildMarkers(raw, messages, pxPerMm);
   const spans = buildSpans(raw, markers, pxPerMm, messages);
   return { markers, spans, pxPerMm: pxPerMm ?? null };
+}
+
+function buildTopMarginWarning(raw: RawFaceMetadata | null): TopMarginWarning | null {
+  if (!raw) {
+    return null;
+  }
+
+  const exceedsShoulders = coerceBoolean(
+    pickValue(raw, ["top_margin_exceeds_shoulders", "topMarginExceedsShoulders"]),
+  );
+  const exceedsSource = coerceBoolean(
+    pickValue(raw, ["top_margin_exceeds_source", "topMarginExceedsSource"]),
+  );
+
+  if (!exceedsShoulders && !exceedsSource) {
+    return null;
+  }
+
+  const requested = coerceNumber(
+    pickValue(raw, ["requested_top_margin_mm", "requestedTopMarginMm"]),
+  );
+  const achieved = coerceNumber(
+    pickValue(raw, ["achieved_top_margin_mm", "achievedTopMarginMm"]),
+  );
+  const maxSupported = coerceNumber(
+    pickValue(raw, ["max_supported_top_margin_mm", "maxSupportedTopMarginMm"]),
+  );
+  const sourceSupported = coerceNumber(
+    pickValue(raw, ["source_supported_top_margin_mm", "sourceSupportedTopMarginMm"]),
+  );
+
+  return {
+    requested,
+    achieved,
+    maxSupported,
+    sourceSupported,
+    exceedsShoulders,
+    exceedsSource,
+  } satisfies TopMarginWarning;
 }
 
 function extractMeasurementSource(payload: unknown) {
@@ -488,6 +547,7 @@ export async function parseZipArchive(blob: Blob, messages: Messages) {
     const assets = assetsMap.get(id) ?? {};
     const metadata = metadataByFace[id];
     const guides = buildFaceGuides(metadata?.raw ?? null, messages);
+    const warning = buildTopMarginWarning(metadata?.raw ?? null);
     return {
       id,
       balanced: assets.balanced ?? null,
@@ -496,6 +556,7 @@ export async function parseZipArchive(blob: Blob, messages: Messages) {
       markers: guides.markers,
       spans: guides.spans,
       pxPerMm: guides.pxPerMm,
+      topMarginWarning: warning,
     } satisfies FaceResult;
   });
 
@@ -536,7 +597,11 @@ export function appendFormData(formData: FormData, formValues: FormValuesState) 
   formData.append("max_extra_padding_px", String(formValues.max_extra_padding_px));
   formData.append("resize_scaling", String(formValues.resize_scaling));
   formData.append("min_top_mm", String(formValues.min_top_mm));
-  formData.append("min_bottom_mm", String(formValues.min_bottom_mm));
+  const derivedMinBottom = Math.max(
+    0,
+    formValues.target_height_mm - formValues.min_top_mm - formValues.target_crown_to_chin_mm,
+  );
+  formData.append("min_bottom_mm", String(derivedMinBottom));
   formData.append("shoulder_clearance_mm", String(formValues.shoulder_clearance_mm));
 }
 

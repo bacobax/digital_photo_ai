@@ -158,6 +158,12 @@ export const MESSAGES: Record<Language, Messages> = {
     closedFormPreviewTotalLabel: "Total height",
     closedFormPreviewShoulderHint:
       "Shoulders require at least {clearance} of clearance below the chin when detected.",
+    topMarginWarningHeading: "Requested top margin not supported",
+    topMarginWarningDescription:
+      "Requested top margin of {requested} could not be achieved.",
+    topMarginWarningAchieved: "The pipeline used {achieved} instead.",
+    topMarginWarningShoulder: "A larger top margin would crop the shoulders.",
+    topMarginWarningSource: "The source image lacks enough space above the crown.",
   },
   it: {
     appTitle: "Assistente foto digitale",
@@ -315,6 +321,12 @@ export const MESSAGES: Record<Language, Messages> = {
     closedFormPreviewTotalLabel: "Altezza totale",
     closedFormPreviewShoulderHint:
       "Le spalle richiedono almeno {clearance} di spazio sotto il mento quando rilevate.",
+    topMarginWarningHeading: "Margine superiore richiesto non supportato",
+    topMarginWarningDescription:
+      "Il margine superiore richiesto di {requested} non può essere rispettato.",
+    topMarginWarningAchieved: "Il sistema ha applicato invece {achieved}.",
+    topMarginWarningShoulder: "Un margine superiore maggiore taglierebbe le spalle.",
+    topMarginWarningSource: "L'immagine originale non ha spazio sufficiente sopra la testa.",
   },
   es: {
     appTitle: "Asistente de fotos digital",
@@ -472,5 +484,11 @@ export const MESSAGES: Record<Language, Messages> = {
     closedFormPreviewTotalLabel: "Altura total",
     closedFormPreviewShoulderHint:
       "Los hombros necesitan al menos {clearance} de espacio bajo el mentón cuando se detectan.",
+    topMarginWarningHeading: "Margen superior solicitado no disponible",
+    topMarginWarningDescription:
+      "No es posible usar el margen superior solicitado de {requested}.",
+    topMarginWarningAchieved: "El sistema utilizó {achieved} en su lugar.",
+    topMarginWarningShoulder: "Un margen superior mayor cortaría los hombros.",
+    topMarginWarningSource: "La imagen original no tiene espacio suficiente sobre la coronilla.",
   },
 };

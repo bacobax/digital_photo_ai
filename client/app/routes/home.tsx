@@ -79,7 +79,6 @@ export default function Home() {
     max_extra_padding_px: 600,
     resize_scaling: 0,
     min_top_mm: 4,
-    min_bottom_mm: 8,
     shoulder_clearance_mm: 3,
   });
 

@@ -1,7 +1,60 @@
 import classNames from "classnames";
 
 import { AnnotatedPreview } from "./AnnotatedPreview";
-import type { ResultsSectionProps } from "../types";
+import type { FaceResult, ResultsSectionProps } from "../types";
+
+type TopMarginWarningCardProps = {
+  warning: NonNullable<FaceResult["topMarginWarning"]>;
+  messages: ResultsSectionProps["messages"];
+};
+
+function formatMmValue(value: number | null, unitLabel: string, fallback: string) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `${value.toFixed(1)} ${unitLabel}`;
+  }
+  return fallback;
+}
+
+function TopMarginWarningCard({ warning, messages }: TopMarginWarningCardProps) {
+  const requestedLabel = formatMmValue(
+    warning.requested,
+    messages.measurementUnitMm,
+    messages.measurementFallback,
+  );
+  const achievedValue = warning.achieved ?? warning.maxSupported ?? warning.sourceSupported;
+  const achievedLabel = achievedValue !== null
+    ? formatMmValue(achievedValue, messages.measurementUnitMm, messages.measurementFallback)
+    : null;
+
+  const reasons: string[] = [];
+  if (warning.exceedsShoulders) {
+    reasons.push(messages.topMarginWarningShoulder);
+  }
+  if (warning.exceedsSource) {
+    reasons.push(messages.topMarginWarningSource);
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 shadow-sm dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+      <div className="font-semibold">{messages.topMarginWarningHeading}</div>
+      <p className="mt-1">
+        {messages.topMarginWarningDescription.replace("{requested}", requestedLabel)}
+      </p>
+      {achievedLabel && (
+        <p className="mt-1 text-xs text-amber-700/90 dark:text-amber-200/90">
+          {messages.topMarginWarningAchieved.replace("{achieved}", achievedLabel)}
+        </p>
+      )}
+      {reasons.length > 0 && (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+          {reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function ResultsSection({
   status,
@@ -74,6 +127,9 @@ export function ResultsSection({
 
       {status === "success" && currentFace && (
         <div className="mt-6 space-y-6">
+          {currentFace.topMarginWarning && (
+            <TopMarginWarningCard warning={currentFace.topMarginWarning} messages={messages} />
+          )}
           {multipleFaces && (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm font-medium text-slate-600 dark:text-slate-300">

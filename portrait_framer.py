@@ -147,6 +147,11 @@ class FacePipelineItem:
     mm_budget_limited_top: bool = False
     mm_budget_limited_bottom: bool = False
     mm_budget_limited_bounds: bool = False
+    requested_top_margin_mm: Optional[float] = None
+    max_supported_top_margin_mm: Optional[float] = None
+    source_supported_top_margin_mm: Optional[float] = None
+    top_margin_exceeds_shoulders: bool = False
+    top_margin_exceeds_source: bool = False
 
 @dataclass
 class RunParameters:
@@ -275,13 +280,15 @@ class FaceFramingPipeline:
     def _solve_mm_budget(self) -> None:
         print("[Closed-Form] Solving mm-budget for detected faces…")
         H, W = self.img.shape[:2]
-        min_top_mm = max(0.0, float(getattr(self.params, "min_top_mm", 4.0)))
-        min_bottom_mm = max(0.0, float(getattr(self.params, "min_bottom_mm", 8.0)))
-        delta_mm = max(0.0, float(getattr(self.params, "shoulder_clearance_mm", 3.0)))
         target_height_mm = float(getattr(self.params, "target_height_mm", 45.0))
+        min_top_mm = max(0.0, float(getattr(self.params, "min_top_mm", 4.0)))
+        c_target = float(getattr(self.params, "target_crown_to_chin_mm", 34.0))
+        derived_min_bottom_mm = max(0.0, target_height_mm - min_top_mm - c_target)
+        setattr(self.params, "min_bottom_mm", derived_min_bottom_mm)
+        min_bottom_mm = derived_min_bottom_mm
+        delta_mm = max(0.0, float(getattr(self.params, "shoulder_clearance_mm", 3.0)))
         c_min = float(getattr(self.params, "min_crown_to_chin_mm", 31.0))
         c_max = float(getattr(self.params, "max_crown_to_chin_mm", 36.0))
-        c_target = float(getattr(self.params, "target_crown_to_chin_mm", 34.0))
         ratio = float(self.params.target_w_over_h)
 
         for idx, item in enumerate(self.items, start=1):
@@ -289,6 +296,13 @@ class FaceFramingPipeline:
             if box is None:
                 print(f"  [Face {idx}] Missing detection box; skipping mm-budget.")
                 continue
+
+            item.requested_top_margin_mm = min_top_mm
+            item.max_supported_top_margin_mm = None
+            item.source_supported_top_margin_mm = None
+            item.top_margin_exceeds_shoulders = False
+            item.top_margin_exceeds_source = False
+            item.mm_shoulder_requirement_mm = delta_mm
 
             hair_top, hair_debug = top_of_hair_y_debug(self.img, box, W, H)
             if hair_debug:
@@ -324,24 +338,59 @@ class FaceFramingPipeline:
 
 
             h_crop = d_px * (target_height_mm / c_target)
-            max_top_mm = (target_height_mm/h_crop) * chin_y - (target_height_mm/h_crop) * shoulder_y - c_target + target_height_mm - delta_mm
-            source_max_top_mm = crown_y * (c_target/d_px)
-            print(f"max top mm margin: {max_top_mm}")
 
-            if max_top_mm < min_top_mm or source_max_top_mm < min_top_mm:
-                print(f"You decided to have a minimum margin of {min_top_mm} mm, but the max you can have is min({max_top_mm}, {source_max_top_mm}) = {min(max_top_mm, source_max_top_mm)}")
+            max_top_mm: Optional[float] = None
+            if shoulder_y is not None and h_crop > 1e-6:
+                scale = target_height_mm / h_crop
+                max_top_mm = (
+                    scale * float(chin_y)
+                    - scale * float(shoulder_y)
+                    - c_target
+                    + target_height_mm
+                    - delta_mm
+                )
+                max_top_mm = max(0.0, max_top_mm)
 
+            source_max_top_mm = crown_y * (c_target / d_px)
+            source_max_top_mm = max(0.0, source_max_top_mm)
 
-            #actual_top_mm = float(input(f"choose a margin which is below {max_top_mm} and {source_max_top_mm} mm: "))
-            actual_top_mm = min(max_top_mm, source_max_top_mm)
-            
-            
+            item.max_supported_top_margin_mm = max_top_mm
+            item.source_supported_top_margin_mm = source_max_top_mm
+
+            exceeds_shoulders = bool(
+                max_top_mm is not None and min_top_mm > max_top_mm + 1e-6
+            )
+            exceeds_source = bool(
+                source_max_top_mm is not None and min_top_mm > source_max_top_mm + 1e-6
+            )
+
+            item.top_margin_exceeds_shoulders = exceeds_shoulders
+            item.top_margin_exceeds_source = exceeds_source
+
+            if exceeds_shoulders or exceeds_source:
+                limits = [value for value in (max_top_mm, source_max_top_mm) if value is not None]
+                if limits:
+                    max_available = min(limits)
+                    print(
+                        "You decided to have a minimum margin of "
+                        f"{min_top_mm:.2f} mm, but the max you can have is "
+                        f"{max_available:.2f} mm."
+                    )
+
+            desired_top_mm = min_top_mm
+            limit_values = [value for value in (max_top_mm, source_max_top_mm) if value is not None]
+            if limit_values:
+                actual_top_mm = min([desired_top_mm, *limit_values])
+            else:
+                actual_top_mm = desired_top_mm
+
+            actual_top_mm = max(0.0, actual_top_mm)
 
             w_crop = h_crop * ratio
-            y_crop_top = crown_y - (actual_top_mm/c_target)*d_px
-            actual_bottom_mm = target_height_mm - actual_top_mm - c_target
+            y_crop_top = crown_y - (actual_top_mm / c_target) * d_px
+            actual_bottom_mm = max(0.0, target_height_mm - actual_top_mm - c_target)
 
-            px_to_mm = c_target/d_px
+            px_to_mm = c_target / d_px
 
             top_px = actual_top_mm / px_to_mm
             bottom_px = actual_bottom_mm / px_to_mm
@@ -352,7 +401,7 @@ class FaceFramingPipeline:
 
             top_px = max(0.0, top_px)
             bottom_px = max(0.0, bottom_px)
-            limited_top = False
+            limited_top = actual_top_mm + 1e-6 < min_top_mm
             limited_bottom = False
             limited_bounds = False
 
@@ -499,6 +548,11 @@ class FaceFramingPipeline:
         item.mm_budget_limited_top = False
         item.mm_budget_limited_bottom = False
         item.mm_budget_limited_bounds = False
+        item.requested_top_margin_mm = None
+        item.max_supported_top_margin_mm = None
+        item.source_supported_top_margin_mm = None
+        item.top_margin_exceeds_shoulders = False
+        item.top_margin_exceeds_source = False
         item.pad_limited = False
         item.trim_limited = False
         item.min_height_req_px = None
@@ -1557,8 +1611,14 @@ class FaceProcessingResult:
     crown: LandmarkMeasurement
     forehead: LandmarkMeasurement
     px_per_mm: Optional[float]
+    achieved_top_margin_mm: Optional[float]
+    requested_top_margin_mm: Optional[float]
+    max_supported_top_margin_mm: Optional[float]
+    source_supported_top_margin_mm: Optional[float]
+    top_margin_exceeds_shoulders: bool
+    top_margin_exceeds_source: bool
 
-    def to_dict(self) -> Dict[str, Optional[float]]:
+    def to_dict(self) -> Dict[str, object]:
         """Return a dictionary with scalar measurements only."""
 
         return {
@@ -1573,6 +1633,12 @@ class FaceProcessingResult:
             "forehead_px": self.forehead.px,
             "forehead_mm": self.forehead.mm,
             "px_per_mm": self.px_per_mm,
+            "achieved_top_margin_mm": self.achieved_top_margin_mm,
+            "requested_top_margin_mm": self.requested_top_margin_mm,
+            "max_supported_top_margin_mm": self.max_supported_top_margin_mm,
+            "source_supported_top_margin_mm": self.source_supported_top_margin_mm,
+            "top_margin_exceeds_shoulders": self.top_margin_exceeds_shoulders,
+            "top_margin_exceeds_source": self.top_margin_exceeds_source,
         }
 
 
@@ -1639,6 +1705,12 @@ class PortraitFramer:
                     crown=to_measurement(item.crown_y_local),
                     forehead=to_measurement(item.top_face_y_local),
                     px_per_mm=px_per_mm,
+                    achieved_top_margin_mm=item.mm_top_margin_mm,
+                    requested_top_margin_mm=item.requested_top_margin_mm,
+                    max_supported_top_margin_mm=item.max_supported_top_margin_mm,
+                    source_supported_top_margin_mm=item.source_supported_top_margin_mm,
+                    top_margin_exceeds_shoulders=item.top_margin_exceeds_shoulders,
+                    top_margin_exceeds_source=item.top_margin_exceeds_source,
                 )
             )
 

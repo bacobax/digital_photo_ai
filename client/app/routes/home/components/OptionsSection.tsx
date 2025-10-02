@@ -165,15 +165,6 @@ export function OptionsSection({
             disabled={disabled}
           />
           <NumberInput
-            label={messages.minBottomMmLabel}
-            suffix={messages.measurementUnitMm}
-            value={formValues.min_bottom_mm}
-            onChange={(value) => onOptionChange("min_bottom_mm", value)}
-            step={0.5}
-            min={0}
-            disabled={disabled}
-          />
-          <NumberInput
             label={messages.shoulderClearanceLabel}
             suffix={messages.measurementUnitMm}
             value={formValues.shoulder_clearance_mm}
@@ -186,7 +177,6 @@ export function OptionsSection({
             <MmBudgetPreview
               targetHeightMm={formValues.target_height_mm}
               minTopMm={formValues.min_top_mm}
-              minBottomMm={formValues.min_bottom_mm}
               shoulderClearanceMm={formValues.shoulder_clearance_mm}
               minCrownToChinMm={formValues.min_crown_to_chin_mm}
               maxCrownToChinMm={formValues.max_crown_to_chin_mm}
