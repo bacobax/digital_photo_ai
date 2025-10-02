@@ -176,7 +176,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=3.0,
         help=(
-            "Additional clearance added below the detected shoulder line"
+            "Extra millimetres guaranteed below the chin when shoulders are detected"
             f"{USAGE_CLOSED}"
         ),
     )
