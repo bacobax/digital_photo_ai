@@ -152,19 +152,19 @@ function computeBudgetGeometry({
   targetCrownToChinMm,
 }: MmBudgetPreviewProps): MmBudgetGeometry {
   const safeTargetHeight = Math.max(targetHeightMm, 1);
-  const minTop = Math.max(0, minTopMm);
+  const requestedTop = Math.max(0, minTopMm);
+  const topMm = Math.min(requestedTop, safeTargetHeight);
+
   const crownMin = Math.max(1, minCrownToChinMm);
   const crownMax = Math.max(crownMin, maxCrownToChinMm);
+  const faceMm = clamp(targetCrownToChinMm, crownMin, crownMax);
 
-  let faceMm = clamp(targetCrownToChinMm, crownMin, crownMax);
-  const maxFaceBudget = Math.max(crownMin, safeTargetHeight - minTop);
-  faceMm = clamp(faceMm, crownMin, maxFaceBudget);
-
-  const topMm = Math.min(Math.max(minTop, safeTargetHeight - faceMm), safeTargetHeight);
-  const bottomMm = Math.max(0, safeTargetHeight - faceMm - topMm);
-
+  const bottomMm = Math.max(0, safeTargetHeight - topMm - faceMm);
   const totalMm = topMm + faceMm + bottomMm;
   const normaliser = totalMm > 0 ? totalMm : 1;
+
+  const faceRequested = clamp(targetCrownToChinMm, minCrownToChinMm, maxCrownToChinMm);
+  const bottomRequested = safeTargetHeight - requestedTop - faceRequested;
 
   return {
     topMm,
@@ -174,9 +174,12 @@ function computeBudgetGeometry({
     topPercent: (topMm / normaliser) * 100,
     facePercent: (faceMm / normaliser) * 100,
     bottomPercent: (bottomMm / normaliser) * 100,
-    topLimited: topMm <= minTop + 0.05,
-    bottomLimited: bottomMm <= 0.05,
-    faceLimited: Math.abs(faceMm - crownMin) <= 0.05 || Math.abs(faceMm - maxFaceBudget) <= 0.05,
+    topLimited: topMm + 0.05 < requestedTop,
+    bottomLimited: bottomMm <= 0.05 || bottomMm + 0.05 < bottomRequested,
+    faceLimited:
+      Math.abs(faceMm - crownMin) <= 0.05 ||
+      Math.abs(faceMm - crownMax) <= 0.05 ||
+      safeTargetHeight - topMm - faceMm <= 0.05,
   };
 }
 
